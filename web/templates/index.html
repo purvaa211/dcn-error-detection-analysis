@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DCN Error Detection & Analysis System</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-content container">
+            <div class="header-titles">
+                <span class="badge badge-accent">DCN Engineering Project</span>
+                <h1>Experimental Analysis of Error Detection Techniques</h1>
+                <p class="subtitle">Comparative Evaluation of VRC / Parity, LRC, Internet Checksum, and CRC</p>
+            </div>
+            <div class="header-meta">
+                <span class="status-indicator live"></span>
+                <span class="meta-text">Backend: Connected (Native Python Engine)</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Global Active Session Data Bar -->
+    <section class="session-bar">
+        <div class="container session-flex">
+            <div class="session-info">
+                <span class="session-label">Active Session Payload:</span>
+                <code id="global-data-display" class="session-code">{{ default_data }}</code>
+                <span id="global-data-length" class="session-length">({{ default_data|length }} bits)</span>
+            </div>
+            <div class="session-actions">
+                <button class="btn btn-sm btn-secondary" onclick="openDataModal()">Change Payload</button>
+                <button class="btn btn-sm btn-outline" onclick="generateRandomData()">Random (16-bit)</button>
+                <button class="btn btn-sm btn-outline" onclick="quickTextPrompt()">ASCII to Binary</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs container">
+        <button class="tab-btn active" data-tab="tab-simulator">1. Transmission Simulator</button>
+        <button class="tab-btn" data-tab="tab-compare">2. Compare Techniques</button>
+        <button class="tab-btn" data-tab="tab-algorithm">3. Algorithm Working</button>
+        <button class="tab-btn" data-tab="tab-experiments">4. Experiments & Analytical Graphs</button>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="container main-content">
+
+        <!-- ============================================================== -->
+        <!-- TAB 1: TRANSMISSION SIMULATOR                                 -->
+        <!-- ============================================================== -->
+        <section id="tab-simulator" class="tab-pane active">
+            <div class="panel-grid">
+                <!-- Configuration Card -->
+                <div class="card config-card">
+                    <div class="card-header">
+                        <h2>Transmission Parameters</h2>
+                        <p class="card-desc">Configure sender protection scheme and physical channel corruption model.</p>
+                    </div>
+                    <form id="sim-form" onsubmit="handleSimulate(event)">
+                        <div class="form-group">
+                            <label for="sim-data">Payload Data (Binary):</label>
+                            <input type="text" id="sim-data" class="form-control code-input" value="{{ default_data }}" required spellcheck="false">
+                            <span class="form-hint">Uses active session data. You can edit here to change for this test.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sim-technique">Error Detection Technique:</label>
+                            <select id="sim-technique" class="form-control" onchange="toggleSimTechniqueOptions()">
+                                <option value="VRC / Parity">VRC / Parity (Even Parity - 1 bit)</option>
+                                <option value="LRC">LRC (Longitudinal Redundancy Check - 8-bit)</option>
+                                <option value="Checksum">Internet Checksum (1's Complement)</option>
+                                <option value="CRC" selected>CRC (Cyclic Redundancy Check)</option>
+                            </select>
+                        </div>
+
+                        <!-- CRC Specific Options -->
+                        <div id="sim-crc-options" class="form-group-sub">
+                            <label for="sim-crc-poly">CRC Generator Polynomial:</label>
+                            <select id="sim-crc-poly" class="form-control">
+                                <option value="100000111">CRC-8 (x^8 + x^2 + x + 1)</option>
+                                <option value="11000000000000101">CRC-16-IBM (x^16 + x^15 + x^2 + 1)</option>
+                                <option value="10001000000100001">CRC-16-CCITT (x^16 + x^12 + x^5 + 1)</option>
+                                <option value="100000100110000010001110110110111">CRC-32-IEEE 802.3</option>
+                            </select>
+                        </div>
+
+                        <!-- Checksum Specific Options -->
+                        <div id="sim-checksum-options" class="form-group-sub" style="display:none;">
+                            <label for="sim-chk-size">Word Size (bits):</label>
+                            <select id="sim-chk-size" class="form-control">
+                                <option value="8" selected>8-bit words</option>
+                                <option value="16">16-bit words</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sim-error-type">Physical Channel Error Model:</label>
+                            <select id="sim-error-type" class="form-control" onchange="toggleSimErrorInputs()">
+                                <option value="clean">1. Clean transmission (No channel errors)</option>
+                                <option value="single" selected>2. Single-bit error (Random or specified bit)</option>
+                                <option value="multiple">3. Multiple-bit error (Independent bit flips)</option>
+                                <option value="burst">4. Burst error (Contiguous span error)</option>
+                                <option value="manual">5. Manual error injection (Specify bit indices)</option>
+                            </select>
+                        </div>
+
+                        <!-- Dynamic Error Parameters -->
+                        <div id="err-param-multi" class="form-group-sub" style="display:none;">
+                            <label for="sim-multi-count">Number of bit errors to inject:</label>
+                            <input type="number" id="sim-multi-count" class="form-control" value="2" min="1" max="128">
+                        </div>
+
+                        <div id="err-param-burst" class="form-group-sub" style="display:none;">
+                            <label for="sim-burst-len">Burst error span length (bits):</label>
+                            <input type="number" id="sim-burst-len" class="form-control" value="4" min="2" max="64">
+                        </div>
+
+                        <div id="err-param-manual" class="form-group-sub" style="display:none;">
+                            <label for="sim-manual-indices">Bit positions to flip (0-indexed, comma-separated):</label>
+                            <input type="text" id="sim-manual-indices" class="form-control" placeholder="e.g. 0, 3, 5">
+                            <span class="form-hint">Indices refer to bit positions in the protected transmitted frame.</span>
+                        </div>
+
+                        <button type="submit" id="btn-run-sim" class="btn btn-primary btn-block">
+                            Simulate Transmission Pipeline
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Simulation Output Report -->
+                <div class="card result-card">
+                    <div class="card-header">
+                        <h2>End-to-End Transmission Report</h2>
+                        <div id="sim-verdict-badge" class="badge badge-neutral">Awaiting Simulation</div>
+                    </div>
+
+                    <div id="sim-empty-state" class="empty-state">
+                        <div class="empty-icon">&#8644;</div>
+                        <p>Configure parameters on the left and click <strong>Simulate Transmission Pipeline</strong> to observe the Sender, Channel, and Receiver process.</p>
+                    </div>
+
+                    <div id="sim-results-container" style="display:none;">
+                        <!-- Stage 1: Sender -->
+                        <div class="pipeline-stage">
+                            <div class="stage-header">
+                                <span class="stage-tag stage-sender">Stage 1: Transmitter (Sender)</span>
+                                <span class="stage-meta" id="sim-stage1-meta">Redundancy: -</span>
+                            </div>
+                            <div class="stage-body">
+                                <div class="bit-row">
+                                    <span class="bit-label">Payload Data:</span>
+                                    <div class="bit-stream" id="sim-out-payload"></div>
+                                </div>
+                                <div class="bit-row">
+                                    <span class="bit-label">Protected Frame:</span>
+                                    <div class="bit-stream" id="sim-out-protected"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Stage 2: Channel -->
+                        <div class="pipeline-stage">
+                            <div class="stage-header">
+                                <span class="stage-tag stage-channel">Stage 2: Physical Channel</span>
+                                <span class="stage-meta" id="sim-stage2-meta">Flipped: -</span>
+                            </div>
+                            <div class="stage-body">
+                                <div class="bit-row">
+                                    <span class="bit-label">Corrupted Frame:</span>
+                                    <div class="bit-stream" id="sim-out-corrupted"></div>
+                                </div>
+                                <div class="error-indices-tag" id="sim-out-indices"></div>
+                            </div>
+                        </div>
+
+                        <!-- Stage 3: Receiver -->
+                        <div class="pipeline-stage">
+                            <div class="stage-header">
+                                <span class="stage-tag stage-receiver">Stage 3: Receiver Verification</span>
+                                <span class="stage-meta" id="sim-stage3-meta">Latency: -</span>
+                            </div>
+                            <div class="stage-body">
+                                <div class="metrics-pill-grid">
+                                    <div class="metric-pill">
+                                        <span class="mp-label">Verification Result</span>
+                                        <span class="mp-val" id="sim-mp-valid">-</span>
+                                    </div>
+                                    <div class="metric-pill">
+                                        <span class="mp-label">Error Detection</span>
+                                        <span class="mp-val" id="sim-mp-detected">-</span>
+                                    </div>
+                                    <div class="metric-pill">
+                                        <span class="mp-label">Transmission Overhead</span>
+                                        <span class="mp-val" id="sim-mp-overhead">-</span>
+                                    </div>
+                                    <div class="metric-pill">
+                                        <span class="mp-label">Total Latency</span>
+                                        <span class="mp-val" id="sim-mp-latency">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Stage 4: Academic Explanation -->
+                        <div class="explanation-box">
+                            <h4>DCN Analytical Explanation:</h4>
+                            <p id="sim-out-explanation" class="explanation-text"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ============================================================== -->
+        <!-- TAB 2: COMPARE TECHNIQUES                                     -->
+        <!-- ============================================================== -->
+        <section id="tab-compare" class="tab-pane">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Comparative Performance Analysis</h2>
+                    <p class="card-desc">Evaluate VRC / Parity, LRC, Internet Checksum, and CRC on identical data and equivalent physical error conditions.</p>
+                </div>
+
+                <div class="compare-controls-bar">
+                    <div class="control-col">
+                        <label>Payload:</label>
+                        <code id="comp-data-preview" class="session-code"></code>
+                    </div>
+                    <div class="control-col">
+                        <label for="comp-error-type">Error Model:</label>
+                        <select id="comp-error-type" class="form-control" onchange="toggleCompErrorInputs()">
+                            <option value="clean">Clean transmission (0 errors)</option>
+                            <option value="single">Single-bit error (1 random bit)</option>
+                            <option value="multiple" selected>Multiple-bit error</option>
+                            <option value="burst">Burst error</option>
+                            <option value="manual">Manual error positions</option>
+                        </select>
+                    </div>
+                    <div class="control-col" id="comp-amount-col">
+                        <label id="comp-amount-label">Error Bit Count:</label>
+                        <input type="number" id="comp-error-amount" class="form-control" value="2" min="1" max="64">
+                    </div>
+                    <div class="control-col" id="comp-manual-col" style="display:none;">
+                        <label>Positions (0-indexed):</label>
+                        <input type="text" id="comp-manual-positions" class="form-control" placeholder="e.g. 1, 4">
+                    </div>
+                    <div class="control-col btn-col">
+                        <button class="btn btn-primary" onclick="handleRunComparison()">Run Comparison</button>
+                    </div>
+                </div>
+
+                <div id="comp-results-container" class="mt-4">
+                    <div id="comp-empty" class="empty-state">
+                        <p>Click <strong>Run Comparison</strong> to execute all four techniques under synchronized error conditions.</p>
+                    </div>
+
+                    <div id="comp-table-wrapper" style="display:none;">
+                        <table class="table compare-table">
+                            <thead>
+                                <tr>
+                                    <th>Technique</th>
+                                    <th>Overhead</th>
+                                    <th>Processing Time</th>
+                                    <th>Corrupted Positions</th>
+                                    <th>Detection Status</th>
+                                    <th>Final Verdict</th>
+                                </tr>
+                            </thead>
+                            <tbody id="comp-table-body"></tbody>
+                        </table>
+
+                        <div id="comp-explanations-grid" class="comp-cards-grid mt-4"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ============================================================== -->
+        <!-- TAB 3: ALGORITHM WORKING                                      -->
+        <!-- ============================================================== -->
+        <section id="tab-algorithm" class="tab-pane">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Step-by-Step Algorithm Demonstrations</h2>
+                    <p class="card-desc">Detailed mathematical traces generated directly by the backend implementations for educational demonstration.</p>
+                </div>
+
+                <div class="algo-selector-bar">
+                    <div class="algo-nav-btns">
+                        <button class="btn btn-sm btn-outline active" onclick="loadAlgorithmTrace('all', this)">All Techniques</button>
+                        <button class="btn btn-sm btn-outline" onclick="loadAlgorithmTrace('vrc', this)">VRC / Parity</button>
+                        <button class="btn btn-sm btn-outline" onclick="loadAlgorithmTrace('lrc', this)">LRC</button>
+                        <button class="btn btn-sm btn-outline" onclick="loadAlgorithmTrace('checksum', this)">Checksum</button>
+                        <button class="btn btn-sm btn-outline" onclick="loadAlgorithmTrace('crc', this)">CRC</button>
+                    </div>
+                    <div class="algo-options">
+                        <label>CRC Poly:</label>
+                        <select id="algo-crc-gen" class="form-control form-control-sm" onchange="refreshAlgorithmTrace()">
+                            <option value="100000111">CRC-8 (100000111)</option>
+                            <option value="11000000000000101">CRC-16-IBM</option>
+                            <option value="10001000000100001">CRC-16-CCITT</option>
+                        </select>
+                        <label>Word Size:</label>
+                        <select id="algo-chk-size" class="form-control form-control-sm" onchange="refreshAlgorithmTrace()">
+                            <option value="8" selected>8-bit</option>
+                            <option value="16">16-bit</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="algo-traces-container" class="traces-container mt-3">
+                    <div class="loading-state">Loading algorithm traces...</div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ============================================================== -->
+        <!-- TAB 4: EXPERIMENTS & ANALYTICAL GRAPHS                        -->
+        <!-- ============================================================== -->
+        <section id="tab-experiments" class="tab-pane">
+            <!-- Staging Notification Banner -->
+            <div id="staging-banner" class="alert alert-warning" style="display:none;">
+                <div class="alert-content">
+                    <strong id="staging-msg">New experiment results have been generated.</strong>
+                    <span>Do you want to apply these changes and replace the project baseline results?</span>
+                </div>
+                <div class="alert-actions">
+                    <button class="btn btn-sm btn-success" onclick="applyStagedExperiments()">Apply and Keep</button>
+                    <button class="btn btn-sm btn-danger" onclick="discardStagedExperiments()">Discard and Restore</button>
+                </div>
+            </div>
+
+            <div class="panel-grid">
+                <!-- Benchmark Configuration Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Benchmark Settings</h2>
+                        <p class="card-desc">Configure payload sizes, error categories, and sample trials for batch empirical evaluation.</p>
+                    </div>
+                    <form id="exp-form" onsubmit="handleRunExperiments(event)">
+                        <div class="form-group">
+                            <label for="exp-sizes">Data Payload Sizes (bits, comma-separated):</label>
+                            <input type="text" id="exp-sizes" class="form-control" value="32, 64, 128, 256, 512">
+                            <span class="form-hint">Default: 32, 64, 128, 256, 512</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="exp-mags">Multi-Bit Error Amounts (bits):</label>
+                            <input type="text" id="exp-mags" class="form-control" value="1, 2, 3, 4, 5, 8">
+                            <span class="form-hint">Default: 1, 2, 3, 4, 5, 8</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="exp-bursts">Burst Spans (bits):</label>
+                            <input type="text" id="exp-bursts" class="form-control" value="2, 4, 8, 16">
+                            <span class="form-hint">Default: 2, 4, 8, 16</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="exp-trials">Trials per Configuration:</label>
+                            <input type="number" id="exp-trials" class="form-control" value="50" min="5" max="500">
+                            <span class="form-hint">Recommended: 50 for full dataset, or 10-20 for fast interactive tests.</span>
+                        </div>
+
+                        <button type="submit" id="btn-run-exp" class="btn btn-primary btn-block">
+                            Run Benchmark Suite & Generate Visualizations
+                        </button>
+                    </form>
+
+                    <div id="exp-progress" class="exp-progress-box mt-3" style="display:none;">
+                        <div class="spinner"></div>
+                        <span id="exp-progress-text">Running benchmark experiments... Please wait.</span>
+                    </div>
+                </div>
+
+                <!-- Baseline Status Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Baseline Repository Status</h2>
+                        <span id="baseline-status-badge" class="badge badge-success">Baseline Available</span>
+                    </div>
+                    <div class="baseline-info-body">
+                        <ul class="status-list">
+                            <li><span class="status-dot green"></span> Raw Trials Dataset: <code class="code-pill">experiment_results.csv</code></li>
+                            <li><span class="status-dot green"></span> Aggregated Metrics: <code class="code-pill">metrics_results.csv</code></li>
+                            <li><span class="status-dot green"></span> Analytical Charts (4 Required): <code class="code-pill">visualization/*.png</code></li>
+                        </ul>
+                        <div class="baseline-meta-box">
+                            <div class="bmb-item">
+                                <span class="bmb-label">Last Modified:</span>
+                                <span id="baseline-last-mod" class="bmb-val">-</span>
+                            </div>
+                            <div class="bmb-item">
+                                <span class="bmb-label">Clean vs Corrupted:</span>
+                                <span class="bmb-val">Properly Separated</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- The 4 Analytical Visualizations -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h2>Analytical Performance Visualizations</h2>
+                    <p class="card-desc">The four analytical graphs generated directly by the backend visualization suite at 300 DPI.</p>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>1. Detection Rate by Error Type</h3>
+                            <span class="chart-sub">Evaluates VRC parity limitations vs LRC, Checksum, and CRC</span>
+                        </div>
+                        <div class="chart-img-wrapper" onclick="openGraphModal('detection_rate_by_error_type.png')">
+                            <img id="img-chart1" src="/api/graphs/detection_rate_by_error_type.png" alt="Detection Rate by Error Type" class="chart-img" onerror="handleChartError(this)">
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>2. Detection Rate vs Error Magnitude</h3>
+                            <span class="chart-sub">Demonstrates 100% odd vs 0% even parity behavior</span>
+                        </div>
+                        <div class="chart-img-wrapper" onclick="openGraphModal('detection_rate_vs_error_magnitude.png')">
+                            <img id="img-chart2" src="/api/graphs/detection_rate_vs_error_magnitude.png" alt="Detection Rate vs Error Magnitude" class="chart-img" onerror="handleChartError(this)">
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>3. Processing Time vs Data Size</h3>
+                            <span class="chart-sub">Computational latency across varying payload scales</span>
+                        </div>
+                        <div class="chart-img-wrapper" onclick="openGraphModal('processing_time_vs_data_size.png')">
+                            <img id="img-chart3" src="/api/graphs/processing_time_vs_data_size.png" alt="Processing Time vs Data Size" class="chart-img" onerror="handleChartError(this)">
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>4. Transmission Overhead vs Data Size</h3>
+                            <span class="chart-sub">Bandwidth penalty ratio curve as payload scales</span>
+                        </div>
+                        <div class="chart-img-wrapper" onclick="openGraphModal('overhead_vs_data_size.png')">
+                            <img id="img-chart4" src="/api/graphs/overhead_vs_data_size.png" alt="Transmission Overhead vs Data Size" class="chart-img" onerror="handleChartError(this)">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metrics Table -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h2>Aggregated Performance Metrics</h2>
+                    <p class="card-desc">Extracted from <code class="code-pill">metrics_results.csv</code></p>
+                </div>
+                <div class="metrics-filter-bar">
+                    <input type="text" id="metrics-search" class="form-control form-control-sm" placeholder="Filter by technique or error type..." oninput="filterMetricsTable()">
+                    <span id="metrics-row-count" class="metrics-count">Loading metrics...</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table metrics-table" id="table-metrics">
+                        <thead>
+                            <tr>
+                                <th>Technique</th>
+                                <th>Error Model</th>
+                                <th>Payload Size</th>
+                                <th>Error Amount</th>
+                                <th>Trials</th>
+                                <th>Detection Rate</th>
+                                <th>Avg Latency (µs)</th>
+                                <th>Overhead (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metrics-table-body">
+                            <tr><td colspan="8" class="text-center">Loading benchmark metrics...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal: Change Payload Data -->
+    <div id="data-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Change Active Session Payload</h3>
+                <button class="modal-close" onclick="closeDataModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Enter a binary bit sequence, plain ASCII text, or click Random:</p>
+                <input type="text" id="modal-data-input" class="form-control code-input" placeholder="e.g. 101100110011 or Hello" autofocus>
+                <div class="modal-options mt-2">
+                    <button class="btn btn-sm btn-outline" onclick="setModalRandom()">Random 16 bits</button>
+                    <button class="btn btn-sm btn-outline" onclick="setModalSample('8')">8-bit Sample</button>
+                    <button class="btn btn-sm btn-outline" onclick="setModalSample('16')">16-bit Sample</button>
+                    <button class="btn btn-sm btn-outline" onclick="setModalSample('32')">32-bit Sample</button>
+                </div>
+                <div id="modal-feedback" class="mt-2" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDataModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitDataModal()">Save Payload</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: High-Res Graph View -->
+    <div id="graph-modal" class="modal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="modal-graph-title">Analytical Chart</h3>
+                <button class="modal-close" onclick="closeGraphModal()">&times;</button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modal-graph-img" src="" alt="High-Res Chart" class="modal-img">
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
