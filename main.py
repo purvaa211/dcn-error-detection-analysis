@@ -10,6 +10,8 @@ Interactive Console Interface.
 import sys
 import os
 import random
+import shutil
+import tempfile
 from typing import List, Dict, Any, Optional, Tuple
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -256,7 +258,7 @@ def run_simulate_transmission() -> None:
 
     # Display Sender -> Channel -> Receiver Pipeline
     print("\n" + "=" * 72)
-    print("                 END-TO-END TRANSMISSION REPORT")
+    print("                 TRANSMISSION REPORT")
     print("=" * 72)
 
     print("\n[STAGE 1: SENDER / TRANSMITTER]")
@@ -310,7 +312,7 @@ def run_simulate_transmission() -> None:
     else:
         print("  Verdict: [ERROR MISSED - UNDETECTED CORRUPTION]")
 
-    print(f"\n  DCN Explanation  : {sim['explanation']}")
+    print(f"\n  Explanation      : {sim['explanation']}")
     print("=" * 72)
 
 
@@ -367,11 +369,6 @@ def run_compare_techniques() -> None:
         print(f"{tech:<16} | {ovh:<16} | {time_us:<12} | {det_str:<18} | {verdict}")
 
     print("=" * 80)
-    print("\nKEY OBSERVATIONS:")
-    print(" - VRC / Parity fails whenever an even number of bits flip in the data (d_min = 2).")
-    print(" - LRC catches errors across different columns but misses same-column pairs.")
-    print(" - Checksum operates with low CPU overhead but is vulnerable to compensating flips.")
-    print(" - CRC provides mathematically guaranteed detection for burst errors <= degree.\n")
 
 
 # ======================================================================
@@ -405,7 +402,6 @@ def run_view_algorithm_working() -> None:
         print()
 
     if c in ("2", "5"):
-        # Fixed: calculate_lrc is properly imported and format_lrc_working handles data directly
         print(format_lrc_working(data, block_size=8))
         print()
 
@@ -419,11 +415,16 @@ def run_view_algorithm_working() -> None:
 
 
 # ======================================================================
-# 4. RUN EXPERIMENTS AND VIEW GRAPHS
+# 4. RUN EXPERIMENTS AND VIEW GRAPHS (SAFE STAGING & CONFIRMATION)
 # ======================================================================
 
 def run_experiments_and_graphs() -> None:
-    """Option 4: Configure benchmark settings, generate datasets and 4 graphs."""
+    """Option 4: Configure benchmark settings, generate datasets and 4 graphs.
+
+    Uses safe staging: files are generated in an isolated temporary location first.
+    The user is prompted to confirm before replacing the existing results on disk.
+    If the user declines, new results are discarded and previous results are preserved.
+    """
     print("\n" + "=" * 72)
     print(" 4. RUN EXPERIMENTS AND VIEW GRAPHS")
     print("=" * 72)
@@ -461,20 +462,82 @@ def run_experiments_and_graphs() -> None:
     trials_in = input("  Trials per configuration [default: 50]: ").strip()
     trials = int(trials_in) if trials_in.isdigit() and int(trials_in) > 0 else 50
 
-    print("\nExecuting experiment benchmark suite...")
-    run_all_experiments(
-        data_sizes=sizes,
-        multi_error_amounts=mags,
-        burst_lengths=bursts,
-        trials=trials,
-        verbose=True
-    )
+    # 1. Setup isolated temporary staging directory
+    staging_dir = tempfile.mkdtemp(prefix="dcn_exp_staging_")
+    staging_exp_csv = os.path.join(staging_dir, "experiment_results.csv")
+    staging_metrics_csv = os.path.join(staging_dir, "metrics_results.csv")
+    staging_viz_dir = os.path.join(staging_dir, "visualization")
+    os.makedirs(staging_viz_dir, exist_ok=True)
 
-    print("Aggregating metrics (clean transmissions kept separate from corrupted trials)...")
-    compute_and_save_metrics(verbose=True)
+    expected_charts = [
+        "detection_rate_by_error_type.png",
+        "detection_rate_vs_error_magnitude.png",
+        "processing_time_vs_data_size.png",
+        "overhead_vs_data_size.png"
+    ]
 
-    print("Generating the four analytical graphs...")
-    generate_all_plots()
+    try:
+        print("\nExecuting benchmark experiments...")
+        run_all_experiments(
+            data_sizes=sizes,
+            multi_error_amounts=mags,
+            burst_lengths=bursts,
+            trials=trials,
+            output_file=staging_exp_csv,
+            verbose=True
+        )
+
+        print("Aggregating metrics...")
+        compute_and_save_metrics(
+            input_file=staging_exp_csv,
+            output_file=staging_metrics_csv,
+            verbose=False
+        )
+
+        print("Generating analytical graphs...")
+        generate_all_plots(
+            csv_path=staging_metrics_csv,
+            output_dir=staging_viz_dir,
+            verbose=True
+        )
+
+        # Validate that all files were generated properly
+        valid_exp = os.path.exists(staging_exp_csv) and os.path.getsize(staging_exp_csv) > 0
+        valid_metrics = os.path.exists(staging_metrics_csv) and os.path.getsize(staging_metrics_csv) > 0
+        valid_charts = all(
+            os.path.exists(os.path.join(staging_viz_dir, c)) and os.path.getsize(os.path.join(staging_viz_dir, c)) > 0
+            for c in expected_charts
+        )
+
+        if not (valid_exp and valid_metrics and valid_charts):
+            print("\n[Error] Benchmark generation failed. Existing files preserved.")
+            return
+
+        # 2. Confirmation prompt before applying
+        print()
+        while True:
+            resp = input("New experiment results have been generated. Do you want to apply these changes and replace the existing results? (y/n): ").strip().lower()
+            if resp in ("y", "yes"):
+                target_exp_csv = os.path.join(PROJECT_ROOT, "experiment_results.csv")
+                target_metrics_csv = os.path.join(PROJECT_ROOT, "metrics_results.csv")
+                target_viz_dir = os.path.join(PROJECT_ROOT, "visualization")
+                os.makedirs(target_viz_dir, exist_ok=True)
+
+                shutil.copy2(staging_exp_csv, target_exp_csv)
+                shutil.copy2(staging_metrics_csv, target_metrics_csv)
+                for c in expected_charts:
+                    shutil.copy2(os.path.join(staging_viz_dir, c), os.path.join(target_viz_dir, c))
+
+                print("Results and graphs updated.")
+                break
+            elif resp in ("n", "no"):
+                print("Changes discarded. Previous results and graphs preserved.")
+                break
+            else:
+                print("Invalid input. Please enter 'y' or 'n'.")
+
+    finally:
+        shutil.rmtree(staging_dir, ignore_errors=True)
 
 
 # ======================================================================
@@ -510,7 +573,7 @@ def main_menu() -> None:
         elif choice == "4":
             run_experiments_and_graphs()
         elif choice == "5":
-            print("\nExiting DCN Error Detection System. Goodbye!\n")
+            print("\nExiting.\n")
             break
         elif choice.lower() == "c":
             prompt_change_session_data()

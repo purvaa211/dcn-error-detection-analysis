@@ -99,7 +99,7 @@ def run_all_experiments(
 
     if verbose:
         print("\n" + "=" * 60)
-        print(" RUNNING DCN BENCHMARK EXPERIMENTS")
+        print(" RUNNING BENCHMARK EXPERIMENTS")
         print(f" Techniques   : {', '.join(techniques)}")
         print(f" Data Sizes   : {data_sizes} bits")
         print(f" Multi-Errors : {multi_error_amounts} bits")
@@ -179,11 +179,7 @@ def run_all_experiments(
 
     elapsed = time.time() - t_start
     if verbose:
-        print("=" * 60)
-        print(f" Completed in {elapsed:.2f} seconds.")
-        print(f" Total generated trial rows: {len(all_results):,}")
-        print(f" Saved to: {output_file}")
-        print("=" * 60 + "\n")
+        print(f"Benchmark completed in {elapsed:.2f} seconds ({len(all_results):,} trials).")
 
     return all_results
 

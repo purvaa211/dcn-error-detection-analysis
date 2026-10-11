@@ -45,7 +45,7 @@ def load_dataset(csv_path: str = "metrics_results.csv") -> Optional[pd.DataFrame
     return pd.read_csv(csv_path)
 
 
-def plot_detection_by_error_type(df: pd.DataFrame) -> str:
+def plot_detection_by_error_type(df: pd.DataFrame, output_dir: Optional[str] = None) -> str:
     """Graph 1: Detection Rate by Error Type and Technique (Grouped Bar Chart).
 
     Clean transmissions are excluded from detection rate calculations
@@ -93,7 +93,7 @@ def plot_detection_by_error_type(df: pd.DataFrame) -> str:
                             ha="center", va="bottom", fontsize=8, fontweight="bold")
 
     ax.set_title("Detection Rate by Error Type and Technique", fontsize=12, fontweight="bold")
-    ax.set_xlabel("Physical Channel Error Category", fontsize=10, fontweight="bold")
+    ax.set_xlabel("Error Model", fontsize=10, fontweight="bold")
     ax.set_ylabel("Detection Rate (%)", fontsize=10, fontweight="bold")
     ax.set_xticks(x)
     ax.set_xticklabels(grouped.index, fontsize=10)
@@ -101,19 +101,16 @@ def plot_detection_by_error_type(df: pd.DataFrame) -> str:
     ax.grid(True, axis="y", linestyle="--", alpha=0.5)
     ax.legend(loc="upper right", framealpha=0.9)
 
-    out_file = os.path.join(OUTPUT_DIR, "detection_rate_by_error_type.png")
+    target_dir = output_dir or OUTPUT_DIR
+    out_file = os.path.join(target_dir, "detection_rate_by_error_type.png")
     plt.tight_layout()
     plt.savefig(out_file, dpi=300)
     plt.close()
     return out_file
 
 
-def plot_detection_vs_error_magnitude(df: pd.DataFrame) -> str:
-    """Graph 2: Detection Rate versus Error Magnitude (Multiple-Bit Errors).
-
-    Demonstrates the fundamental parity limitation (100% on odd, 0% on even errors)
-    versus LRC, Checksum, and CRC.
-    """
+def plot_detection_vs_error_magnitude(df: pd.DataFrame, output_dir: Optional[str] = None) -> str:
+    """Graph 2: Detection Rate versus Error Magnitude (Multiple-Bit Errors)."""
     sub = df[df["error_type"] == "multiple"].copy()
     if sub.empty:
         return ""
@@ -140,22 +137,23 @@ def plot_detection_vs_error_magnitude(df: pd.DataFrame) -> str:
         )
 
     ax.set_title(f"Detection Rate vs Error Magnitude ({ref_size}-bit Payload)", fontsize=12, fontweight="bold")
-    ax.set_xlabel("Number of Injected Bit Errors (Magnitude)", fontsize=10, fontweight="bold")
+    ax.set_xlabel("Number of Bit Errors", fontsize=10, fontweight="bold")
     ax.set_ylabel("Detection Rate (%)", fontsize=10, fontweight="bold")
     ax.set_ylim(-5, 108)
     ax.set_xticks(sorted(sub["error_amount"].unique()))
     ax.grid(True, linestyle="--", alpha=0.6)
     ax.legend(loc="lower right", framealpha=0.9)
 
-    out_file = os.path.join(OUTPUT_DIR, "detection_rate_vs_error_magnitude.png")
+    target_dir = output_dir or OUTPUT_DIR
+    out_file = os.path.join(target_dir, "detection_rate_vs_error_magnitude.png")
     plt.tight_layout()
     plt.savefig(out_file, dpi=300)
     plt.close()
     return out_file
 
 
-def plot_processing_time_vs_data_size(df: pd.DataFrame) -> str:
-    """Graph 3: Processing Time versus Data Size (Computational Latency)."""
+def plot_processing_time_vs_data_size(df: pd.DataFrame, output_dir: Optional[str] = None) -> str:
+    """Graph 3: Processing Time versus Data Size."""
     sub = df[df["error_type"] == "single"].copy()
     if sub.empty:
         return ""
@@ -188,14 +186,15 @@ def plot_processing_time_vs_data_size(df: pd.DataFrame) -> str:
     ax.grid(True, linestyle="--", alpha=0.6)
     ax.legend(loc="upper left", framealpha=0.9)
 
-    out_file = os.path.join(OUTPUT_DIR, "processing_time_vs_data_size.png")
+    target_dir = output_dir or OUTPUT_DIR
+    out_file = os.path.join(target_dir, "processing_time_vs_data_size.png")
     plt.tight_layout()
     plt.savefig(out_file, dpi=300)
     plt.close()
     return out_file
 
 
-def plot_overhead_vs_data_size(df: pd.DataFrame) -> str:
+def plot_overhead_vs_data_size(df: pd.DataFrame, output_dir: Optional[str] = None) -> str:
     """Graph 4: Transmission Overhead versus Data Size."""
     sub = df[df["error_type"] == "single"].copy()
     if sub.empty:
@@ -228,15 +227,21 @@ def plot_overhead_vs_data_size(df: pd.DataFrame) -> str:
     ax.grid(True, linestyle="--", alpha=0.6)
     ax.legend(loc="upper right", framealpha=0.9)
 
-    out_file = os.path.join(OUTPUT_DIR, "overhead_vs_data_size.png")
+    target_dir = output_dir or OUTPUT_DIR
+    out_file = os.path.join(target_dir, "overhead_vs_data_size.png")
     plt.tight_layout()
     plt.savefig(out_file, dpi=300)
     plt.close()
     return out_file
 
 
-def generate_all_plots(csv_path: str = "metrics_results.csv") -> List[str]:
-    """Generate ONLY the four required analytical graphs using fresh metrics data.
+def generate_all_plots(csv_path: str = "metrics_results.csv", output_dir: Optional[str] = None, verbose: bool = True) -> List[str]:
+    """Generate the four analytical graphs.
+
+    Args:
+        csv_path: Path to metrics results CSV.
+        output_dir: Target directory for generated PNG images (defaults to visualization/).
+        verbose: Whether to print console progress.
 
     Returns:
         List of generated file paths.
@@ -245,40 +250,30 @@ def generate_all_plots(csv_path: str = "metrics_results.csv") -> List[str]:
     if df is None:
         return []
 
-    print("\n" + "=" * 60)
-    print(" GENERATING ANALYTICAL VISUALIZATIONS (4 Required Charts)")
-    print("=" * 60)
+    target_dir = output_dir or OUTPUT_DIR
+    os.makedirs(target_dir, exist_ok=True)
 
     generated: List[str] = []
 
-    # 1. Detection rate by error type and technique
-    f1 = plot_detection_by_error_type(df)
+    f1 = plot_detection_by_error_type(df, output_dir=target_dir)
     if f1:
         generated.append(f1)
-        print(f" [Chart 1] Detection Rate by Error Type and Technique -> {os.path.basename(f1)}")
 
-    # 2. Detection rate versus error magnitude
-    f2 = plot_detection_vs_error_magnitude(df)
+    f2 = plot_detection_vs_error_magnitude(df, output_dir=target_dir)
     if f2:
         generated.append(f2)
-        print(f" [Chart 2] Detection Rate vs Error Magnitude          -> {os.path.basename(f2)}")
 
-    # 3. Processing time versus data size
-    f3 = plot_processing_time_vs_data_size(df)
+    f3 = plot_processing_time_vs_data_size(df, output_dir=target_dir)
     if f3:
         generated.append(f3)
-        print(f" [Chart 3] Processing Time vs Data Size               -> {os.path.basename(f3)}")
 
-    # 4. Transmission overhead versus data size
-    f4 = plot_overhead_vs_data_size(df)
+    f4 = plot_overhead_vs_data_size(df, output_dir=target_dir)
     if f4:
         generated.append(f4)
-        print(f" [Chart 4] Transmission Overhead vs Data Size         -> {os.path.basename(f4)}")
 
-    print("=" * 60)
-    print(f" Successfully generated {len(generated)} charts at 300 DPI.")
-    print(f" Saved in: {OUTPUT_DIR}")
-    print("=" * 60 + "\n")
+    if verbose:
+        for f in generated:
+            print(f"  -> {os.path.basename(f)}")
 
     return generated
 
