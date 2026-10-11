@@ -1,10 +1,11 @@
-"""Parity Check Algorithm (1D Vertical Redundancy Check - VRC).
+"""Parity Check Algorithm (Vertical Redundancy Check - VRC).
 
 Supports both Even and Odd parity schemes.
 In Even Parity, a redundant bit is appended such that the total number of 1s is even.
 In Odd Parity, a redundant bit is appended such that the total number of 1s is odd.
 
 DCN Characteristics:
+- Redundancy: 1 bit per data unit.
 - Detects all single-bit errors (100%).
 - Detects all odd numbers of bit errors (3, 5, 7, ...).
 - Completely FAILS to detect any even number of bit errors (2, 4, 6, ...) because parity remains unchanged.
@@ -21,7 +22,7 @@ def validate_binary(data: str) -> None:
 
 
 def add_parity(data: str, mode: str = "even") -> str:
-    """Append a parity bit to the binary data.
+    """Append a parity bit to the binary data (VRC).
 
     Args:
         data: Binary string (e.g. '1011001').
@@ -44,7 +45,7 @@ def add_parity(data: str, mode: str = "even") -> str:
 
 
 def check_parity(frame: str, mode: str = "even") -> Tuple[bool, Dict[str, Any]]:
-    """Check whether a received frame satisfies the parity rule.
+    """Check whether a received frame satisfies the parity rule (VRC).
 
     Args:
         frame: Received frame string including parity bit.
@@ -80,9 +81,44 @@ def check_parity(frame: str, mode: str = "even") -> Tuple[bool, Dict[str, Any]]:
     return is_valid, details
 
 
+def format_vrc_working(data: str, mode: str = "even") -> str:
+    """Format step-by-step VRC / Parity calculation for educational display."""
+    validate_binary(data)
+    ones = data.count("1")
+    is_even = (ones % 2 == 0)
+
+    if mode.lower() == "even":
+        par_bit = "0" if is_even else "1"
+        rule = "Total 1s must be EVEN"
+        reason = f"Current 1s = {ones} ({'already even -> append 0' if is_even else 'odd -> append 1 to make even'})"
+    else:
+        par_bit = "1" if is_even else "0"
+        rule = "Total 1s must be ODD"
+        reason = f"Current 1s = {ones} ({'even -> append 1 to make odd' if is_even else 'already odd -> append 0'})"
+
+    lines = [
+        "=" * 60,
+        f" VERTICAL REDUNDANCY CHECK (VRC / {mode.upper()} PARITY) CALCULATION",
+        "=" * 60,
+        f" Original Data Bits : {data} ({len(data)} bits)",
+        f" Parity Scheme      : {mode.upper()} Parity",
+        f" Number of 1s in Data: {ones}",
+        f" Rule Applied       : {rule}",
+        f" Step Explanation   : {reason}",
+        f" Calculated VRC Bit : {par_bit}",
+        f" Transmitted Frame  : {data} [VRC: {par_bit}] -> {data + par_bit}",
+        "=" * 60
+    ]
+    return "\n".join(lines)
+
+
 # ==========================================
-# BACKWARD COMPATIBLE WRAPPERS
+# ALIASES & BACKWARD COMPATIBLE WRAPPERS
 # ==========================================
+
+add_vrc = add_parity
+check_vrc = check_parity
+
 
 def add_even_parity(data: str) -> str:
     """Add even parity bit to data (backward-compatible function)."""

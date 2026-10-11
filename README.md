@@ -10,23 +10,26 @@
 
 ## 1. Project Overview
 
-In computer networks, physical transmission media are inherently susceptible to electromagnetic interference, thermal noise, and attenuation. These impairments corrupt transmitted bits, manifesting as **single-bit**, **multiple-bit**, or **burst errors**.
+In computer networks, physical transmission media are inherently susceptible to electromagnetic interference, attenuation, and noise. These impairments cause bit inversions during transmission.
 
 This project implements a complete, structured **Data Link Layer Error Control Architecture** featuring:
 1. **Interactive Transmitter-Channel-Receiver Pipeline:** Demonstrates end-to-end data framing, redundancy bit computation, channel error injection, and receiver integrity validation.
-2. **Proper Error Detection Techniques:**
-   - **Vertical Redundancy Check (1D Parity):** Even and Odd Parity schemes.
-   - **Two-Dimensional Parity Matrix (2D Parity / LRC + VRC):** Detects 1, 2, and 3-bit errors; pinpoints coordinates to correct single-bit errors.
-   - **Internet Checksum (RFC 1071):** 8-bit and 16-bit 1's complement arithmetic with end-around carry (used in TCP/IP).
-   - **Cyclic Redundancy Check (CRC):** Modulo-2 binary polynomial division ($GF(2)$ XOR arithmetic) supporting CRC-8 (ATM), CRC-16-CCITT (Bluetooth/HDLC), CRC-32 (Ethernet), and custom polynomials.
-   - **Hamming Code (7,4):** Forward Error Detection and Correction.
-3. **Channel Impairment & Error Generation Models:**
-   - Single-bit impulse noise
-   - Multiple random bit errors
-   - Textbook burst errors (first & last bit corrupted, intermediate random)
-   - Deterministic manual bit flips (for interactive jury testing)
-   - Probabilistic Bit Error Rate (BER) channel noise
-4. **Focused DCN Analytical Visualizations:** Generates only the 4 essential comparative charts + 1 Master 2x2 Presentation Dashboard. No repetitive or redundant graphs!
+2. **Four Detection Techniques:**
+   - **VRC / Parity (Vertical Redundancy Check):** Appends 1 parity bit per data unit to achieve even parity ($d_{min} = 2$).
+   - **LRC (Longitudinal Redundancy Check):** Organizes data into blocks and computes column-by-column parity bits.
+   - **Checksum (Internet Checksum RFC 1071):** Computes 8-bit 1's complement sum with end-around carry (used in TCP/IP).
+   - **CRC (Cyclic Redundancy Check):** Modulo-2 binary polynomial division ($GF(2)$ XOR arithmetic) using the standard CRC-8 generator polynomial ($x^8 + x^2 + x + 1$).
+3. **Five Error Generation Models:**
+   - Clean transmission (zero error introduced)
+   - Single-bit error (random isolated bit flip)
+   - Multiple-bit error (user-specified $k$ bit flips)
+   - Burst error (contiguous span of noise with corrupted endpoints)
+   - Manual error injection (user selects exact bit positions to flip)
+4. **Four Analytical Visualizations:**
+   - Detection rate by error type and technique (Grouped bar chart)
+   - Detection rate versus error magnitude (Multi-bit curve highlighting parity limitation)
+   - Processing time versus data size (Computational latency benchmark in $\mu s$)
+   - Transmission overhead versus data size (Redundancy percentage trade-off)
 
 ---
 
@@ -35,33 +38,32 @@ This project implements a complete, structured **Data Link Layer Error Control A
 ```
 error_detection_project/
 │
-├── algorithms/                    # Error Detection & Correction Algorithms
-│   ├── parity.py                  # 1D Parity (Even & Odd VRC)
-│   ├── two_dim_parity.py          # 2D Matrix Parity (LRC + VRC) with visual grid
+├── algorithms/                    # Error Detection Algorithms
+│   ├── parity.py                  # VRC / Parity (Vertical Redundancy Check)
+│   ├── lrc.py                     # LRC (Longitudinal Redundancy Check)
 │   ├── checksum.py                # Internet Checksum (RFC 1071 1's complement)
-│   ├── crc.py                     # Cyclic Redundancy Check (CRC-8, CRC-16, CRC-32)
-│   └── hamming.py                 # Hamming Code (7,4) (Detection & Correction)
+│   ├── crc.py                     # Cyclic Redundancy Check (CRC-8, Modulo-2 division)
+│   └── two_dim_parity.py          # 2D Matrix Parity helper
 │
 ├── simulation/                    # Transmission & Noise Simulation
-│   ├── error_generator.py         # Channel noise models (Single, Multi, Burst, Manual, BER)
-│   └── simulator.py               # End-to-end transmitter -> channel -> receiver pipeline
+│   ├── error_generator.py         # 5 Error models: Clean, Single, Multiple, Burst, Manual
+│   └── simulator.py               # End-to-end pipeline & synchronized multi-technique comparison
 │
 ├── experiments/                   # Empirical Benchmarking Suite
 │   ├── experiment_runner.py       # Monte Carlo empirical trials
-│   └── metrics.py                 # Statistical aggregation (Detection %, Latency, Overhead)
+│   └── metrics.py                 # Statistical aggregation (clean separate from corrupted)
 │
-├── visualization/                 # Publication-Ready Analytical Visualizations
+├── visualization/                 # The 4 Analytical Visualizations
 │   ├── plot_results.py            # High-resolution (300 DPI) plotting engine
-│   ├── detection_rate_by_error_count.png  # Chart 1: Multi-Bit Detection Curve
-│   ├── burst_error_detection_rate.png     # Chart 2: Burst Noise Immunity Curve
-│   ├── transmission_overhead.png          # Chart 3: Bandwidth Overhead Tradeoff
-│   ├── processing_time.png                # Chart 4: Execution Latency (us)
-│   └── dcn_performance_dashboard.png     # Master 2x2 Presentation Dashboard
+│   ├── detection_rate_by_error_type.png       # Graph 1: Detection Rate by Error Type & Technique
+│   ├── detection_rate_vs_error_magnitude.png  # Graph 2: Detection Rate vs Error Magnitude
+│   ├── processing_time_vs_data_size.png       # Graph 3: Processing Time vs Data Size
+│   └── overhead_vs_data_size.png              # Graph 4: Transmission Overhead vs Data Size
 │
 ├── experiment_results.csv         # Raw experimental Monte Carlo trials
 ├── metrics_results.csv            # Aggregated statistical performance indicators
-├── main.py                        # Interactive menu-driven console CLI for jury presentation
-└── README.md                      # Project manual, viva preparation guide & documentation
+├── main.py                        # Interactive console CLI with exactly 5 main menu options
+└── README.md                      # Project manual, architecture & viva guide
 ```
 
 ---
@@ -84,59 +86,74 @@ error_detection_project/
 
 ---
 
-## 4. Interactive Menu Overview (`main.py`)
+## 4. Main Menu Overview (`main.py`)
 
-When you run `python main.py`, an interactive menu appears:
+When you run `python main.py`, the menu appears with exactly these five options:
 
 ```
 ========================================================================
      DATA COMMUNICATION AND COMPUTER NETWORKS (DCN) PROJECT
       ERROR GENERATION, DETECTION & ANALYSIS SYSTEM
 ========================================================================
-  [1] Interactive Transmission Walkthrough (Sender -> Channel -> Receiver)
-  [2] Multi-Technique Comparison on Same Input (Side-by-Side Live Demo)
-  [3] Step-by-Step CRC Modulo-2 Division Trace
-  [4] 2D Parity Matrix Grid Visualizer (Row + Column Check)
-  [5] Generate Essential Analytical Visualizations & Dashboard
-  [6] Run Statistical Benchmark Suite (Regenerate CSV Datasets)
-  [7] DCN Theoretical Quick Reference & Jury Viva Guide
-  [8] Exit
+  1. Simulate Data Transmission
+  2. Compare Error Detection Techniques
+  3. View Algorithm Working
+  4. Run Experiments and View Graphs
+  5. Exit
 ========================================================================
 ```
 
-### Highlights for Your Presentation:
-- **Option 1 (Interactive Walkthrough):** Allows you or the jury to enter custom binary strings (e.g., `11010011`) or regular text strings (e.g., `DCN`), select any error detection technique, and inject errors. The console displays the transmission stage by stage, highlighting corrupted bits with index pointers (`^`), receiver syndromes, and theoretical explanations.
-- **Option 2 (Side-by-Side Comparison):** Runs Parity, 2D-Parity, Checksum, CRC-8, and CRC-16 against the **exact same corrupted frame**. Shows live how Even Parity misses 2 bit errors while 2D-Parity and CRC detect them!
-- **Option 3 (CRC Modulo-2 Division Trace):** Displays the exact quotient, XOR operations, and remainder calculation step-by-step. Perfect for answering: *"Show me the modulo-2 division math."*
-- **Option 4 (2D Parity Matrix Visualizer):** Prints an ASCII grid showing data rows, row parities, and column parity (LRC). If 1 bit is flipped, it highlights the intersection `(Row r, Column c)` and shows how it can be corrected.
-- **Option 5 (Visualization Suite):** Generates only the 4 essential analytical graphs and the Master 2x2 Dashboard without blocking popups.
+### Feature Details:
+
+- **1. Simulate Data Transmission:**
+  - Lets users choose custom binary, ASCII text (auto-converted to binary), or random bits.
+  - Select any of the 4 detection techniques: **VRC / Parity**, **LRC**, **Checksum**, or **CRC**.
+  - Select any of the 5 error models: **Clean**, **Single-bit**, **Multiple-bit**, **Burst**, or **Manual bit flips**.
+  - Displays the full **Sender** $\to$ **Channel** (with visual `^` pointers at error positions) $\to$ **Receiver** $\to$ **Final Verdict** pipeline.
+
+- **2. Compare Error Detection Techniques:**
+  - Evaluates all four techniques (**VRC / Parity**, **LRC**, **Checksum**, and **CRC**) on the **exact same input data** and **equivalent error conditions**.
+  - Displays a side-by-side comparison matrix showing Overhead (bits and %), Processing Time ($\mu s$), Detection Result, and Verdict.
+
+- **3. View Algorithm Working:**
+  - Displays step-by-step mathematical traces:
+    - **VRC / Parity:** Shows 1s count, parity bit rule, and appended frame.
+    - **LRC:** Shows 2D block grid, column-by-column 1s counts, and resulting LRC block check character.
+    - **Checksum:** Shows word division, 1's complement summation, end-around carry wrapping, and bitwise NOT.
+    - **CRC:** Shows generator polynomial, zero padding, full Modulo-2 XOR division trace, quotient, and FCS remainder.
+
+- **4. Run Experiments and View Graphs:**
+  - Allows configuration of payload sizes, error magnitudes, burst lengths, and trial counts.
+  - Generates fresh datasets (`experiment_results.csv`, `metrics_results.csv`).
+  - Keeps clean transmissions separate from corrupted trials.
+  - Generates the 4 required analytical graphs directly from the latest data.
+
+- **5. Exit:**
+  - Terminates the application.
 
 ---
 
 ## 5. Analytical Visualizations Explained
 
-Only the 4 essential analytical charts required for DCN analysis are generated:
-
 | Chart File | Analytical Purpose | Key DCN Takeaway |
 | :--- | :--- | :--- |
-| **`detection_rate_by_error_count.png`** | Evaluates detection probability as error count increases from 1 to 8 bits. | **Parity Oscillation:** Parity detects 100% of odd errors (1, 3, 5, 7) and 0% of even errors (2, 4, 6, 8) because $d_{min}=2$. **2D Parity & CRC** detect ~100% across all error amounts. |
-| **`burst_error_detection_rate.png`** | Measures resilience against contiguous impulse noise across spans of 2 to 16 bits. | **CRC Mathematical Guarantee:** CRC-8 guarantees 100% detection for burst lengths $L \le 8$. Single parity averages only ~50% detection for burst errors. |
-| **`transmission_overhead.png`** | Compares redundancy bit percentage as payload size grows from 32 to 1024 bits. | Shows bandwidth tradeoff: Parity adds only 1 bit ($O(1)$), CRC adds degree $r$ bits (overhead drops below 1% for larger frames), 2D parity has higher overhead on small frames. |
-| **`processing_time.png`** | Compares execution latency (encoding + checking time in microseconds $\mu s$). | Parity and Checksum require simple addition/XOR ($O(N)$), while CRC polynomial division takes slightly higher computational time. |
-| **`dcn_performance_dashboard.png`** | **Master 2x2 Dashboard** combining all 4 charts into one figure. | Ideal for inserting as a single slide into your PowerPoint presentation! |
+| **`detection_rate_by_error_type.png`** | Grouped bar chart comparing the 4 techniques across Single-bit, Multiple-bit, and Burst errors. | Highlights comparative robustness: CRC provides near 100% detection across all error types; VRC drops on multiple errors; LRC provides strong burst protection. |
+| **`detection_rate_vs_error_magnitude.png`** | Evaluates detection probability as error count increases from 1 to 8 bits. | **Parity Oscillation:** VRC detects 100% of odd errors (1, 3, 5, 7) and 0% of even errors (2, 4, 6, 8) because $d_{min}=2$. LRC, Checksum, and CRC maintain high detection. |
+| **`processing_time_vs_data_size.png`** | Compares execution latency in microseconds ($\mu s$) across payload sizes (32 to 1024 bits). | Demonstrates algorithm efficiency: VRC and Checksum require simple $O(N)$ operations, while CRC polynomial division incurs slightly higher processing time. |
+| **`overhead_vs_data_size.png`** | Compares redundancy bit percentage as payload size grows from 32 to 1024 bits. | Demonstrates bandwidth trade-off: Redundancy percentage drops dramatically as payload grows ($O(1)$ redundant bits versus $O(N)$ payload). |
 
 ---
 
 ## 6. DCN Viva / Jury Question & Answer Guide
 
-### Q1: Why does Single Parity Check fail to detect two-bit errors?
-> **Answer:** Parity check has a minimum Hamming distance of $d_{min} = 2$. It can only detect errors up to $d_{min} - 1 = 1$. When an even number of bits (such as 2, 4, or 6) are inverted, the parity (evenness or oddness of 1s) remains unchanged, resulting in an undetected error.
+### Q1: Why does VRC (Single Parity) fail to detect two-bit errors?
+> **Answer:** Parity check has a minimum Hamming distance of $d_{min} = 2$. It can only guarantee detection for $d_{min} - 1 = 1$ bit error. When an even number of bits (such as 2, 4, or 6) are inverted, the parity (evenness or oddness of 1s) remains unchanged, resulting in an undetected error.
 
-### Q2: How does Two-Dimensional (2D) Parity improve upon 1D Parity?
-> **Answer:** 2D Parity arranges data bits into an $R \times C$ matrix, calculating row parity (VRC) and column parity (LRC). Its minimum Hamming distance is $d_{min} = 4$. It detects all 1-bit, 2-bit, and 3-bit errors. Furthermore, for a single-bit error, the intersection of the corrupted row and corrupted column pinpoints the exact bit coordinate, enabling forward error correction (FEC).
+### Q2: What is Longitudinal Redundancy Check (LRC) and how does it differ from VRC?
+> **Answer:** In LRC, data is organized into blocks (rows), and parity is computed for each column across all rows to form an LRC block check byte. While VRC fails if two bits flip in the same character/row, LRC detects them because they affect different columns. LRC only fails if an even number of bit errors occur in the exact same column position across different rows.
 
 ### Q3: What is the weakness of the Internet Checksum?
-> **Answer:** The Internet Checksum (RFC 1071) uses 1's complement addition. Its main vulnerability is **compensating errors**—if one bit is flipped from 0 to 1 and another bit in the same column in another word is flipped from 1 to 0, the sum remains identical, and the error goes undetected. It is also insensitive to transposition of whole words.
+> **Answer:** The Internet Checksum (RFC 1071) uses 1's complement addition with end-around carry. Its main vulnerability is **compensating errors**—if one bit is flipped from 0 to 1 and another bit in the same column in another word is flipped from 1 to 0, the sum remains identical, and the error goes undetected. It is also insensitive to transposition of whole words.
 
 ### Q4: What makes CRC the preferred error detection technique in Data Link protocols?
 > **Answer:** CRC is based on polynomial modulo-2 arithmetic. If generator polynomial $G(x)$ of degree $r$ satisfies standard conditions:
@@ -144,5 +161,4 @@ Only the 4 essential analytical charts required for DCN analysis are generated:
 > - It detects 100% of double-bit errors (if $G(x)$ does not divide $x^k + 1$).
 > - It detects 100% of odd-bit errors (if $G(x)$ contains $(x+1)$ as a factor).
 > - It detects 100% of burst errors of length $L \le r$.
-> - It detects $1 - (1/2)^{r-1}$ of burst errors of length $L = r+1$ (99.2% for CRC-8; 99.997% for CRC-16).
-> - It is implemented efficiently in hardware using simple linear feedback shift registers (LFSRs).
+> - It is implemented efficiently in hardware using linear feedback shift registers (LFSRs).

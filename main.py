@@ -1,39 +1,35 @@
-"""Data Communications and Networking (DCN) Course Project.
+"""Data Communication and Computer Networks (DCN) Project.
 
-Topic: Error Generation, Detection, and Comparative Performance Analysis
+Error Generation, Detection, and Comparative Performance Analysis System.
 Author: Purva
-Course: Data Communication and Computer Networks (DCN)
+Subject: Data Communication and Computer Networks (DCN)
 
-Interactive Console Interface for jury presentation, live demonstration,
-and empirical analysis.
+Interactive Console Interface.
 """
 
 import sys
 import os
-import time
-from typing import List, Optional
+from typing import List, Dict, Any, Optional
 
-# Ensure project root is in sys.path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from algorithms.parity import add_parity, check_parity
-from algorithms.two_dim_parity import encode_2d_parity, check_2d_parity, format_2d_matrix_display
-from algorithms.checksum import add_checksum, verify_checksum_detailed
-from algorithms.crc import crc_encode, crc_check_detailed, modulo2_divide, CRC_POLYNOMIALS
-from algorithms.hamming import hamming_encode, hamming_check
+from algorithms.parity import add_vrc, check_vrc, format_vrc_working
+from algorithms.lrc import add_lrc, check_lrc, format_lrc_working
+from algorithms.checksum import add_checksum, verify_checksum_detailed, format_checksum_working
+from algorithms.crc import crc_encode, crc_check_detailed, format_crc_working, CRC_POLYNOMIALS
 from simulation.simulator import simulate, compare_all_techniques
 from simulation.error_generator import (
+    clean_transmission,
     single_bit_error,
     multiple_bit_error,
     burst_error,
-    manual_error,
-    ber_channel_error
+    manual_error
 )
-from visualization.plot_results import generate_all_plots
 from experiments.experiment_runner import run_all_experiments
 from experiments.metrics import compute_and_save_metrics
+from visualization.plot_results import generate_all_plots
 
 
 # ======================================================================
@@ -58,20 +54,11 @@ def text_to_binary(text: str) -> str:
     return "".join(format(ord(c), "08b") for c in text)
 
 
-def binary_to_text(binary: str) -> str:
-    """Convert an 8-bit aligned binary string back to ASCII text."""
-    chars = []
-    for i in range(0, len(binary) - (len(binary) % 8), 8):
-        byte_chunk = binary[i:i + 8]
-        chars.append(chr(int(byte_chunk, 2)))
-    return "".join(chars)
-
-
 def get_user_data_input() -> str:
     """Prompt user to supply data via binary, text, or random generation."""
     print("\n--- DATA INPUT SELECTION ---")
     print("  [1] Enter Custom Binary String (e.g. 110100110011)")
-    print("  [2] Enter Plain Text String    (auto-converted to binary ASCII)")
+    print("  [2] Enter Plain Text String    (auto-converted to 8-bit binary ASCII)")
     print("  [3] Generate Random Binary Bits")
 
     choice = input("\nEnter choice [1-3] (default 1): ").strip()
@@ -95,7 +82,6 @@ def get_user_data_input() -> str:
         return bin_data
 
     else:
-        # Custom binary
         while True:
             raw_bin = input("Enter binary string (0s and 1s): ").strip()
             if not raw_bin:
@@ -117,65 +103,49 @@ def highlight_corrupted_bits(original: str, corrupted: str, flipped_indices: Lis
 
 
 # ======================================================================
-# MENU OPTION 1: INTERACTIVE SINGLE TRANSMISSION WALKTHROUGH
+# 1. SIMULATE DATA TRANSMISSION
 # ======================================================================
 
-def run_interactive_walkthrough() -> None:
-    """Execute step-by-step interactive simulation."""
+def run_simulate_transmission() -> None:
+    """Option 1: Simulate data transmission pipeline."""
+    print("\n" + "=" * 72)
+    print(" 1. SIMULATE DATA TRANSMISSION")
+    print("=" * 72)
+
+    # 1. Input Data
     data = get_user_data_input()
 
-    print("\n--- ERROR DETECTION TECHNIQUE ---")
-    print("  [1] Even Parity (1D VRC - Vertical Redundancy Check)")
-    print("  [2] Odd Parity  (1D VRC)")
-    print("  [3] Two-Dimensional (2D) Parity Matrix (LRC + VRC)")
-    print("  [4] Internet Checksum (8-bit RFC 1071)")
-    print("  [5] Internet Checksum (16-bit RFC 1071)")
-    print("  [6] CRC-8 (ATM polynomial: x^8 + x^2 + x + 1)")
-    print("  [7] CRC-16-CCITT (HDLC / Bluetooth: x^16 + x^12 + x^5 + 1)")
-    print("  [8] CRC-32 (IEEE 802.3 Ethernet standard)")
-    print("  [9] Custom CRC Generator Polynomial")
-    print("  [10] Hamming Code (7,4) (Forward Error Detection & Correction)")
+    # 2. Detection Technique
+    print("\n--- SELECT DETECTION TECHNIQUE ---")
+    print("  [1] VRC / Parity (Vertical Redundancy Check)")
+    print("  [2] LRC          (Longitudinal Redundancy Check)")
+    print("  [3] Checksum     (Internet Checksum - 8-bit)")
+    print("  [4] CRC          (Cyclic Redundancy Check - CRC-8)")
 
-    tech_choice = input("\nSelect technique [1-10] (default 6): ").strip()
+    tech_choice = input("\nSelect technique [1-4] (default 4): ").strip()
     tech_map = {
-        "1": "Parity-Even",
-        "2": "Parity-Odd",
-        "3": "2D-Parity",
-        "4": "Checksum-8",
-        "5": "Checksum-16",
-        "6": "CRC-8",
-        "7": "CRC-16-CCITT",
-        "8": "CRC-32",
-        "9": "CRC",
-        "10": "Hamming"
+        "1": "VRC / Parity",
+        "2": "LRC",
+        "3": "Checksum",
+        "4": "CRC"
     }
-    technique = tech_map.get(tech_choice, "CRC-8")
+    technique = tech_map.get(tech_choice, "CRC")
 
-    custom_crc = "100000111"
-    if technique == "CRC":
-        custom_crc = input("Enter binary generator polynomial (e.g. 1101 or 100000111): ").strip()
-        if not custom_crc or not all(c in "01" for c in custom_crc):
-            custom_crc = "100000111"
+    # 3. Error Model (Exactly 5 models)
+    print("\n--- SELECT ERROR GENERATION MODEL ---")
+    print("  [1] Clean transmission       (Zero error introduced)")
+    print("  [2] Single-bit error         (Random isolated bit flip)")
+    print("  [3] Multiple-bit error       (Specify number of bit flips)")
+    print("  [4] Burst error              (Contiguous span of noise)")
+    print("  [5] Manual error injection   (Select exact bit positions to flip)")
 
-    print("\n--- ERROR GENERATION MODEL ---")
-    print("  [1] Clean Transmission (No error introduced)")
-    print("  [2] Single-Bit Error (Random bit flip)")
-    print("  [3] Multiple-Bit Error (Specify bit count k)")
-    print("  [4] Burst Error (Contiguous span of noise)")
-    print("  [5] Manual Error Injection (Pick exact bit indices to flip - Jury Demo)")
-    print("  [6] Channel Noise (Bit Error Rate probability)")
-
-    err_choice = input("\nSelect error model [1-6] (default 3): ").strip()
-
-    err_type = "multiple"
-    err_amount: any = 2
+    err_choice = input("\nSelect error model [1-5] (default 2): ").strip()
+    err_type = "single"
+    err_amount: any = 1
 
     if err_choice == "1":
-        err_type = "none"
+        err_type = "clean"
         err_amount = 0
-    elif err_choice == "2":
-        err_type = "single"
-        err_amount = 1
     elif err_choice == "3":
         err_type = "multiple"
         val = input("Enter number of bit errors to inject (default 2): ").strip()
@@ -186,52 +156,48 @@ def run_interactive_walkthrough() -> None:
         err_amount = int(val) if val.isdigit() else 4
     elif err_choice == "5":
         err_type = "manual"
-        val = input("Enter 0-based bit indices separated by commas (e.g. 2, 5): ").strip()
+        val = input("Enter 0-based bit positions to flip separated by commas (e.g. 2, 5): ").strip()
         err_amount = [int(p.strip()) for p in val.split(",") if p.strip().isdigit()]
         if not err_amount:
-            err_amount = [2, 4]
-    elif err_choice == "6":
-        err_type = "ber"
-        val = input("Enter Bit Error Rate probability (e.g. 0.05): ").strip()
-        try:
-            err_amount = float(val)
-        except ValueError:
-            err_amount = 0.05
+            err_amount = [2]
+    else:
+        err_type = "single"
+        err_amount = 1
 
-    # Run simulation
+    # Execute simulation
     sim = simulate(
         data=data,
         technique=technique,
         error_type=err_type,
-        error_amount=err_amount,
-        crc_generator=custom_crc
+        error_amount=err_amount
     )
 
-    # Display results cleanly
+    # Display Sender -> Channel -> Receiver Pipeline
     print("\n" + "=" * 72)
     print("                 END-TO-END TRANSMISSION REPORT")
     print("=" * 72)
 
-    print("\n[STAGE 1: TRANSMITTER / SENDER]")
-    print(f"  Payload Data     : {sim['original_data']} ({sim['payload_length']} bits)")
-    print(f"  Technique Used   : {sim['technique']}")
+    print("\n[STAGE 1: SENDER / TRANSMITTER]")
+    print(f"  Input Payload    : {sim['original_data']} ({sim['payload_length']} bits)")
+    print(f"  Technique Applied: {sim['technique']}")
     print(f"  Protected Frame  : {sim['protected_frame']} ({len(sim['protected_frame'])} bits)")
     print(f"  Redundancy Added : {sim['overhead_bits']} bit(s)")
     print(f"  Channel Overhead : {sim['overhead_percentage']:.2f}%")
     print(f"  Encoding Latency : {sim['encoding_time'] * 1e6:.2f} us")
 
-    print("\n[STAGE 2: PHYSICAL CHANNEL IMPAIRMENTS]")
-    print(f"  Error Model      : {sim['error_type'].upper()}")
-    print(f"  Injected Errors  : {sim['errors_injected']} bit(s)")
-    print(f"  Corrupted Indices: {sim['flipped_indices']}")
-    print(f"  Original Frame   : {sim['protected_frame']}")
+    print("\n[STAGE 2: CHANNEL (ERROR INJECTION)]")
+    print(f"  Error Model Used : {sim['error_type'].upper()}")
+    print(f"  Errors Injected  : {sim['errors_injected']} bit(s)")
+    print(f"  Error Positions  : {sim['flipped_indices']}")
+    print(f"  Protected Frame  : {sim['protected_frame']}")
     print(f"  Corrupted Frame  : {sim['corrupted_frame']}")
     pointer_str = highlight_corrupted_bits(sim['protected_frame'], sim['corrupted_frame'], sim['flipped_indices'])
-    print(f"  Error Location   : {pointer_str}")
+    print(f"  Error Locations  : {pointer_str}")
 
-    print("\n[STAGE 3: RECEIVER VERIFICATION & DIAGNOSTICS]")
-    print(f"  Verification Time: {sim['checking_time'] * 1e6:.2f} us")
-    print(f"  Total Latency    : {sim['processing_time'] * 1e6:.2f} us")
+    print("\n[STAGE 3: RECEIVER & VERIFICATION]")
+    print(f"  Received Frame   : {sim['corrupted_frame']}")
+    print(f"  Checking Latency : {sim['checking_time'] * 1e6:.2f} us")
+    print(f"  Total Proc. Time : {sim['processing_time'] * 1e6:.2f} us")
 
     # Diagnostic details
     if "CRC" in sim["technique"]:
@@ -241,253 +207,213 @@ def run_interactive_walkthrough() -> None:
         sum_hex = sim["diagnostics"].get("final_sum_hex", "")
         exp_hex = sim["diagnostics"].get("expected_sum_hex", "")
         print(f"  Checksum Sum     : {sum_hex} (Expected: {exp_hex})")
-    elif "2D" in sim["technique"]:
-        fr = sim["diagnostics"].get("failed_rows", [])
-        fc = sim["diagnostics"].get("failed_cols", [])
-        print(f"  Failed Rows      : {fr}")
-        print(f"  Failed Columns   : {fc}")
+    elif "LRC" in sim["technique"]:
+        rec = sim["diagnostics"].get("received_lrc", "")
+        exp = sim["diagnostics"].get("expected_lrc", "")
+        fc = sim["diagnostics"].get("failed_columns", [])
+        print(f"  Received LRC     : {rec}")
+        print(f"  Computed LRC     : {exp}")
+        print(f"  Failed Column(s) : {fc}")
+    elif "VRC" in sim["technique"]:
+        rec = sim["diagnostics"].get("received_parity", "")
+        exp = sim["diagnostics"].get("expected_parity", "")
+        print(f"  Received Parity  : {rec}")
+        print(f"  Computed Parity  : {exp}")
 
-    print("\n[STAGE 4: VERDICT & DCN THEORETICAL ANALYSIS]")
+    print("\n[STAGE 4: FINAL DETECTION RESULT]")
     if sim["errors_injected"] == 0:
-        print("  Status: [CLEAN FRAME - ACCEPTED (ACK)]")
+        print("  Verdict: [CLEAN TRANSMISSION - FRAME ACCEPTED]")
     elif sim["error_detected"]:
-        print("  Status: [ERROR DETECTED - FRAME REJECTED (NAK)]")
+        print("  Verdict: [ERROR DETECTED - FRAME REJECTED]")
     else:
-        print("  Status: [ERROR MISSED - UNDETECTED TRANSMISSION CORRUPTION!]")
+        print("  Verdict: [ERROR MISSED - UNDETECTED CORRUPTION]")
 
     print(f"\n  DCN Explanation  : {sim['explanation']}")
     print("=" * 72)
 
 
 # ======================================================================
-# MENU OPTION 2: MULTI-TECHNIQUE COMPARISON SIDE-BY-SIDE
+# 2. COMPARE ERROR DETECTION TECHNIQUES
 # ======================================================================
 
-def run_multi_technique_comparison() -> None:
-    """Run all primary error detection techniques against the same scenario."""
-    print("\n--- MULTI-TECHNIQUE COMPARATIVE DEMONSTRATION ---")
+def run_compare_techniques() -> None:
+    """Option 2: Compare all four techniques on same input and equivalent errors."""
+    print("\n" + "=" * 72)
+    print(" 2. COMPARE ERROR DETECTION TECHNIQUES")
+    print("=" * 72)
+
     data = get_user_data_input()
 
-    print("\nSelect Error Injection Scenario:")
-    print("  [1] Single-Bit Error       (k = 1)")
-    print("  [2] Two-Bit Error          (k = 2  -> Critical Test for Parity!)")
-    print("  [3] Four-Bit Error         (k = 4)")
-    print("  [4] Burst Error            (span = 6 bits)")
-    print("  [5] Custom Manual Flip     (user-specified indices)")
+    print("\n--- SELECT ERROR SCENARIO TO TEST ON ALL FOUR TECHNIQUES ---")
+    print("  [1] Clean transmission")
+    print("  [2] Single-bit error       (1 bit flip)")
+    print("  [3] Two-bit error          (2 bit flips -> Classic Parity Failure Test)")
+    print("  [4] Four-bit error         (4 bit flips)")
+    print("  [5] Burst error            (span of 6 bits)")
+    print("  [6] Manual error injection (select bit positions to flip)")
 
-    choice = input("\nSelect scenario [1-5] (default 2): ").strip()
+    choice = input("\nSelect scenario [1-6] (default 3): ").strip()
     if choice == "1":
+        err_type, err_amount = "clean", 0
+    elif choice == "2":
         err_type, err_amount = "single", 1
-    elif choice == "3":
-        err_type, err_amount = "multiple", 4
     elif choice == "4":
-        err_type, err_amount = "burst", 6
+        err_type, err_amount = "multiple", 4
     elif choice == "5":
-        val = input("Enter comma-separated bit indices to flip: ").strip()
+        err_type, err_amount = "burst", 6
+    elif choice == "6":
+        val = input("Enter comma-separated bit positions to flip: ").strip()
         pos = [int(p) for p in val.split(",") if p.strip().isdigit()]
         err_type, err_amount = "manual", pos if pos else [1, 3]
     else:
         err_type, err_amount = "multiple", 2
 
+    # Run all 4 techniques on the exact same input & equivalent error pattern
     results = compare_all_techniques(data, error_type=err_type, error_amount=err_amount)
 
-    print("\n" + "=" * 78)
-    print(f" COMPARATIVE EVALUATION MATRIX ON {len(data)}-BIT PAYLOAD")
+    print("\n" + "=" * 80)
+    print(f" COMPARATIVE EVALUATION MATRIX ({len(data)}-bit Input)")
     print(f" Scenario: {err_type.upper()} error (magnitude: {err_amount})")
-    print("=" * 78)
+    print("=" * 80)
 
-    header = f"{'Technique':<20} | {'Overhead':<10} | {'Error Detected?':<16} | {'Verdict'}"
+    header = f"{'Technique':<16} | {'Overhead':<14} | {'Proc. Time':<12} | {'Detection Result':<18} | {'Verdict'}"
     print(header)
-    print("-" * 78)
+    print("-" * 80)
 
     for r in results:
         tech = r["technique"]
         ovh = f"{r['overhead_bits']}b ({r['overhead_percentage']:.1f}%)"
-        detected_str = "YES [DETECTED]" if r["error_detected"] else "NO  [MISSED!]"
-        verdict = "Rejected (NAK)" if r["error_detected"] else "UNDETECTED ERROR"
+        time_us = f"{r['processing_time'] * 1e6:.2f} us"
+        if r["errors_injected"] == 0:
+            det_str = "CLEAN [VALID]"
+            verdict = "Accepted"
+        elif r["error_detected"]:
+            det_str = "YES [DETECTED]"
+            verdict = "Rejected"
+        else:
+            det_str = "NO  [MISSED!]"
+            verdict = "Undetected Error"
 
-        print(f"{tech:<20} | {ovh:<10} | {detected_str:<16} | {verdict}")
+        print(f"{tech:<16} | {ovh:<14} | {time_us:<12} | {det_str:<18} | {verdict}")
 
-    print("=" * 78)
-    print("\nKEY OBSERVATIONS FOR JURY:")
-    print(" 1. Single Parity Check fails whenever an EVEN number of bits flip (d_min = 2).")
-    print(" 2. 2D Parity Matrix successfully detects all 1, 2, and 3-bit errors (d_min = 4).")
-    print(" 3. Checksum provides good protection but can be fooled by compensating errors.")
-    print(" 4. CRC provides mathematically guaranteed detection for burst lengths <= degree.\n")
-
-
-# ======================================================================
-# MENU OPTION 3: CRC DIVISION STEP-BY-STEP TRACE
-# ======================================================================
-
-def run_crc_trace() -> None:
-    """Display educational modulo-2 division breakdown."""
-    print("\n--- CRC MODULO-2 DIVISION BREAKDOWN ---")
-    data = input("Enter binary data (default: 110101): ").strip()
-    if not data or not all(c in "01" for c in data):
-        data = "110101"
-
-    print("\nSelect Generator Polynomial:")
-    print("  [1] CRC-8 (ATM): 100000111")
-    print("  [2] CRC-4 (ITU): 10011")
-    print("  [3] Custom Generator")
-
-    c = input("Choice [1-3] (default 2 for clean trace): ").strip()
-    if c == "1":
-        gen = "100000111"
-    elif c == "3":
-        gen = input("Enter generator: ").strip()
-        if not gen or not all(b in "01" for b in gen):
-            gen = "10011"
-    else:
-        gen = "10011"
-
-    degree = len(gen) - 1
-    padded = data + ("0" * degree)
-    quotient, remainder, steps = modulo2_divide(padded, gen, track_steps=True)
-
-    print("\n" + "=" * 60)
-    print(" CRC MODULO-2 (XOR) DIVISION TRACE")
-    print("=" * 60)
-    print(f" Data Payload        : {data}")
-    print(f" Generator Polynomial: {gen} (Degree = {degree})")
-    print(f" Zero-Padded Dividend: {padded}")
-    print("-" * 60)
-
-    for s in steps[:10]:  # Limit first 10 steps for clarity
-        q = s["quotient_bit"]
-        print(f" Step {s['index']+1:<2}: Dividend chunk = {s['before_xor']} | XOR with {s['generator']} -> {s['after_xor']}")
-
-    if len(steps) > 10:
-        print(f" ... ({len(steps) - 10} additional division steps completed)")
-
-    print("-" * 60)
-    print(f" Quotient Bits       : {quotient}")
-    print(f" Calculated Remainder: {remainder} (FCS / CRC Checksum)")
-    print(f" Transmitted Frame   : {data + remainder}")
-    print("=" * 60 + "\n")
+    print("=" * 80)
+    print("\nKEY OBSERVATIONS:")
+    print(" - VRC / Parity fails whenever an even number of bits flip (d_min = 2).")
+    print(" - LRC catches errors across different columns but fails on same-column pairs.")
+    print(" - Checksum detects most errors with low CPU latency but is vulnerable to compensating flips.")
+    print(" - CRC provides mathematically guaranteed detection for burst errors <= degree.\n")
 
 
 # ======================================================================
-# MENU OPTION 4: 2D PARITY MATRIX VISUALIZER
+# 3. VIEW ALGORITHM WORKING
 # ======================================================================
 
-def run_2d_parity_visualizer() -> None:
-    """Display 2D parity matrix in visual table format."""
-    print("\n--- 2D PARITY MATRIX (LRC + VRC) VISUALIZER ---")
-    data = input("Enter binary string (default 16 bits): ").strip()
-    if not data or not all(c in "01" for c in data):
-        data = "1100101011110000"
-
-    print(f"\nEncoding payload ({len(data)} bits) into 8-bit rows...")
-    frame, enc_info = encode_2d_parity(data, col_size=8)
-
-    print("\n[TRANSMITTED 2D MATRIX]")
-    print(format_2d_matrix_display(enc_info))
-
-    inject = input("\nInject a single-bit error to test matrix localization? [Y/n]: ").strip().lower()
-    if inject != "n":
-        pos_str = input(f"Enter bit index to flip [0 to {len(frame)-1}] (default 3): ").strip()
-        flip_pos = int(pos_str) if pos_str.isdigit() and int(pos_str) < len(frame) else 3
-        corrupted = list(frame)
-        corrupted[flip_pos] = "1" if corrupted[flip_pos] == "0" else "0"
-        corrupted_frame = "".join(corrupted)
-
-        is_valid, chk_info = check_2d_parity(corrupted_frame, col_size=8)
-        print("\n[RECEIVED CORRUPTED 2D MATRIX]")
-        print(format_2d_matrix_display(chk_info))
-
-        print("\nDIAGNOSIS:")
-        print(f"  Integrity Status : {'VALID' if is_valid else 'ERROR DETECTED!'}")
-        print(f"  Flipped Bit Index: {flip_pos}")
-        print(f"  Failed Row(s)    : {chk_info['failed_rows']}")
-        print(f"  Failed Column(s) : {chk_info['failed_cols']}")
-        if chk_info.get("single_error_coord"):
-            r, c = chk_info["single_error_coord"]
-            print(f"  -> Error localized at Matrix Coordinates: Row {r}, Column {c}!")
-            print("  -> 2D Parity can correct this error by inverting the bit at (Row, Col)!")
-
-
-# ======================================================================
-# MENU OPTION 5: GENERATE ESSENTIAL VISUALIZATIONS
-# ======================================================================
-
-def run_visualization_suite() -> None:
-    """Generate the 4 essential DCN charts plus Master Dashboard."""
-    print("\nGenerating focused DCN analytical visualizations...")
-    files = generate_all_plots()
-
-    open_dash = input("\nOpen Master Dashboard image in window? [y/N]: ").strip().lower()
-    if open_dash == "y":
-        import matplotlib.pyplot as plt
-        dash_path = os.path.join(PROJECT_ROOT, "visualization", "dcn_performance_dashboard.png")
-        if os.path.exists(dash_path):
-            img = plt.imread(dash_path)
-            plt.figure(figsize=(12, 8))
-            plt.imshow(img)
-            plt.axis("off")
-            plt.title("DCN Analysis Dashboard (Close window to return)")
-            plt.show()
-
-
-# ======================================================================
-# MENU OPTION 6: RUN STATISTICAL BENCHMARK EXPERIMENTS
-# ======================================================================
-
-def run_benchmark_experiments() -> None:
-    """Run Monte Carlo simulation trials and update CSV metrics."""
-    print("\n--- STATISTICAL BENCHMARK CONFIGURATION ---")
-    print("  [1] Fast Demo Mode (50 trials/config  ~ 1 second)  [Recommended for Live Presentation]")
-    print("  [2] Full Batch Mode (500 trials/config ~ 6 seconds)")
-
-    c = input("\nSelect mode [1-2] (default 1): ").strip()
-    trials = 500 if c == "2" else 50
-
-    run_all_experiments(trials=trials, verbose=True)
-    compute_and_save_metrics(verbose=True)
-    print("Regenerating analytical charts from new metrics...")
-    generate_all_plots()
-    print("All benchmark datasets and figures updated successfully!\n")
-
-
-# ======================================================================
-# MENU OPTION 7: DCN THEORETICAL QUICK REFERENCE & VIVA GUIDE
-# ======================================================================
-
-def show_theory_guide() -> None:
-    """Display comprehensive DCN theoretical reference guide."""
+def run_view_algorithm_working() -> None:
+    """Option 3: Show step-by-step VRC, LRC, Checksum, and CRC calculations."""
     print("\n" + "=" * 72)
-    print("     DCN ERROR DETECTION THEORY & JURY Q&A REFERENCE GUIDE")
+    print(" 3. VIEW ALGORITHM WORKING")
     print("=" * 72)
 
-    print("""
-1. VERTICAL REDUNDANCY CHECK (VRC / 1D PARITY):
-   - Redundancy  : 1 bit per data unit.
-   - Hamming Dist: d_min = 2.
-   - Capability  : Detects all single-bit and odd numbers of errors.
-   - Limitation  : Fails 100% on any even number of bit errors (2, 4, 6...).
+    print("  [1] VRC / Parity Step-by-Step Working")
+    print("  [2] LRC          Step-by-Step Working")
+    print("  [3] Checksum     Step-by-Step Working")
+    print("  [4] CRC          Step-by-Step Working (Modulo-2 Division)")
+    print("  [5] View All Four Algorithms")
 
-2. TWO-DIMENSIONAL PARITY (2D LRC + VRC):
-   - Redundancy  : R + C + 1 bits (matrix boundary).
-   - Hamming Dist: d_min = 4.
-   - Capability  : Detects all 1, 2, and 3-bit errors.
-   - Localization: Locates single-bit error by row/column intersection -> FEC!
+    c = input("\nSelect algorithm to view [1-5] (default 5): ").strip()
+    data = input("Enter binary string to calculate (default: 1101001100101101): ").strip()
+    if not data or not all(b in "01" for b in data):
+        data = "1101001100101101"
 
-3. INTERNET CHECKSUM (RFC 1071):
-   - Arithmetic  : 1's complement addition with end-around carry.
-   - Standard    : TCP, UDP, IPv4 headers.
-   - Capability  : Detects all odd-bit errors, high burst detection.
-   - Limitation  : Vulnerable to compensating errors (e.g. transposition).
+    print(f"\nUsing Input Data ({len(data)} bits): {data}\n")
 
-4. CYCLIC REDUNDANCY CHECK (CRC):
-   - Mathematical: Modulo-2 polynomial division over GF(2).
-   - Capability  : Detects 100% burst errors of length <= generator degree r.
-                   Detects 1 - (1/2)^(r-1) of bursts of length r + 1.
-                   Detects 1 - (1/2)^r of bursts of length > r + 1.
-   - Industry Use: IEEE 802.3 Ethernet (CRC-32), Bluetooth (CRC-16), ATM (CRC-8).
-""")
+    if c == "1" or c == "5":
+        print(format_vrc_working(data, mode="even"))
+        print()
+
+    if c == "2" or c == "5":
+        _, lrc_info = calculate_lrc(data, block_size=8)
+        print(format_lrc_working(lrc_info))
+        print()
+
+    if c == "3" or c == "5":
+        print(format_checksum_working(data, word_size=8))
+        print()
+
+    if c == "4" or c == "5":
+        print(format_crc_working(data, generator="100000111"))
+        print()
+
+
+# ======================================================================
+# 4. RUN EXPERIMENTS AND VIEW GRAPHS
+# ======================================================================
+
+def run_experiments_and_graphs() -> None:
+    """Option 4: Configure experiments, generate datasets, and create 4 graphs."""
+    print("\n" + "=" * 72)
+    print(" 4. RUN EXPERIMENTS AND VIEW GRAPHS")
     print("=" * 72)
-    input("Press Enter to return to main menu...")
+
+    print("Configure Experiment Parameters:")
+
+    # Trial count
+    trials_in = input("  Trials per configuration [default: 50]: ").strip()
+    trials = int(trials_in) if trials_in.isdigit() and int(trials_in) > 0 else 50
+
+    # Data sizes
+    sizes_in = input("  Data sizes in bits comma-separated [default: 32, 64, 128, 256, 512, 1024]: ").strip()
+    if sizes_in:
+        sizes = [int(s.strip()) for s in sizes_in.split(",") if s.strip().isdigit()]
+    else:
+        sizes = [32, 64, 128, 256, 512, 1024]
+    if not sizes:
+        sizes = [32, 64, 128, 256, 512, 1024]
+
+    # Error magnitudes for multiple-bit errors
+    mag_in = input("  Multiple-bit error magnitudes comma-separated [default: 1, 2, 3, 4, 5, 6, 7, 8]: ").strip()
+    if mag_in:
+        mags = [int(m.strip()) for m in mag_in.split(",") if m.strip().isdigit()]
+    else:
+        mags = [1, 2, 3, 4, 5, 6, 7, 8]
+    if not mags:
+        mags = [1, 2, 3, 4, 5, 6, 7, 8]
+
+    # Burst lengths
+    burst_in = input("  Burst lengths in bits comma-separated [default: 2, 4, 6, 8, 12, 16]: ").strip()
+    if burst_in:
+        bursts = [int(b.strip()) for b in burst_in.split(",") if b.strip().isdigit()]
+    else:
+        bursts = [2, 4, 6, 8, 12, 16]
+    if not bursts:
+        bursts = [2, 4, 6, 8, 12, 16]
+
+    print("\nExecuting experiment suite...")
+    run_all_experiments(
+        data_sizes=sizes,
+        multi_error_amounts=mags,
+        burst_lengths=bursts,
+        trials=trials,
+        verbose=True
+    )
+
+    print("Aggregating metrics (keeping clean transmissions separate from corrupted trials)...")
+    compute_and_save_metrics(verbose=True)
+
+    print("Generating the four required analytical graphs...")
+    charts = generate_all_plots()
+
+    open_q = input("\nPreview generated graphs in windows? [y/N]: ").strip().lower()
+    if open_q == "y":
+        import matplotlib.pyplot as plt
+        for chart_path in charts:
+            if os.path.exists(chart_path):
+                img = plt.imread(chart_path)
+                plt.figure(figsize=(10, 6))
+                plt.imshow(img)
+                plt.axis("off")
+                plt.title(f"{os.path.basename(chart_path)} (Close window to see next)")
+                plt.show()
 
 
 # ======================================================================
@@ -495,42 +421,33 @@ def show_theory_guide() -> None:
 # ======================================================================
 
 def main_menu() -> None:
-    """Main interactive driver."""
+    """Main interactive driver with exactly the 5 required menu options."""
     while True:
         print_banner()
-        print("  [1] Interactive Transmission Walkthrough (Sender -> Channel -> Receiver)")
-        print("  [2] Multi-Technique Comparison on Same Input (Side-by-Side Live Demo)")
-        print("  [3] Step-by-Step CRC Modulo-2 Division Trace")
-        print("  [4] 2D Parity Matrix Grid Visualizer (Row + Column Check)")
-        print("  [5] Generate Essential Analytical Visualizations & Dashboard")
-        print("  [6] Run Statistical Benchmark Suite (Regenerate CSV Datasets)")
-        print("  [7] DCN Theoretical Quick Reference & Jury Viva Guide")
-        print("  [8] Exit")
+        print("  1. Simulate Data Transmission")
+        print("  2. Compare Error Detection Techniques")
+        print("  3. View Algorithm Working")
+        print("  4. Run Experiments and View Graphs")
+        print("  5. Exit")
         print("=" * 72)
 
-        choice = input("\nEnter your choice [1-8]: ").strip()
+        choice = input("\nEnter your choice [1-5]: ").strip()
 
         if choice == "1":
-            run_interactive_walkthrough()
+            run_simulate_transmission()
         elif choice == "2":
-            run_multi_technique_comparison()
+            run_compare_techniques()
         elif choice == "3":
-            run_crc_trace()
+            run_view_algorithm_working()
         elif choice == "4":
-            run_2d_parity_visualizer()
+            run_experiments_and_graphs()
         elif choice == "5":
-            run_visualization_suite()
-        elif choice == "6":
-            run_benchmark_experiments()
-        elif choice == "7":
-            show_theory_guide()
-        elif choice == "8":
-            print("\nThank you for using the DCN Error Detection System. Good luck with the jury!\n")
+            print("\nExiting DCN Error Detection System. Thank you!\n")
             break
         else:
-            print(" [!] Invalid option. Please enter a number between 1 and 8.")
+            print(" [!] Invalid option. Please enter a number between 1 and 5.")
 
-        input("\nPress Enter to continue...")
+        input("\nPress Enter to return to main menu...")
         clear_screen()
 
 

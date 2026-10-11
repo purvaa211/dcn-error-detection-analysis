@@ -198,3 +198,39 @@ def crc_check_detailed(
     }
 
     return is_valid, details
+
+
+def format_crc_working(data: str, generator: str = "100000111") -> str:
+    """Format step-by-step CRC Modulo-2 polynomial division for educational display."""
+    gen = resolve_generator(generator)
+    degree = len(gen) - 1
+    padded_data = data + ("0" * degree)
+    quotient, remainder, steps = modulo2_divide(padded_data, gen, track_steps=True)
+
+    lines = [
+        "=" * 60,
+        " CYCLIC REDUNDANCY CHECK (CRC) STEP-BY-STEP CALCULATION",
+        "=" * 60,
+        f" Original Data Bits   : {data} ({len(data)} bits)",
+        f" Generator Polynomial : {gen} (Degree = {degree})",
+        f" Padded Dividend (D+0): {padded_data} (Appended {degree} zeros)",
+        "-" * 60,
+        " Modulo-2 Division (XOR arithmetic):"
+    ]
+
+    for s in steps:
+        idx = s["index"] + 1
+        q_bit = s["quotient_bit"]
+        b_xor = s["before_xor"]
+        g_val = s["generator"]
+        a_xor = s["after_xor"]
+        lines.append(f"  Step {idx:<2}: Dividend chunk = {b_xor} | Quotient bit = {q_bit}")
+        lines.append(f"           XOR with Divisor = {g_val} -> Remainder chunk = {a_xor}")
+
+    lines.append("-" * 60)
+    lines.append(f" Complete Quotient   : {quotient}")
+    lines.append(f" Final Remainder/FCS : {remainder} ({len(remainder)} bits)")
+    lines.append(f" Transmitted Frame   : {data} [FCS: {remainder}] -> {data + remainder}")
+    lines.append("=" * 60)
+
+    return "\n".join(lines)

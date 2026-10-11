@@ -1,10 +1,12 @@
 """Metrics Processing Module for Error Detection Evaluation.
 
 Aggregates raw Monte Carlo trial results into statistical performance indicators:
-- Detection Rate (%)
-- Undetected Error Rate (%)
-- Average Computational Latency (μs)
+- Detection Rate (%) on Corrupted Transmissions
+- Clean Transmission Integrity / False Alarm Rate
+- Average Computational Latency (us)
 - Redundancy Overhead (bits and %)
+
+Maintains clean transmissions separate from corrupted trials.
 """
 
 import csv
@@ -23,7 +25,9 @@ def load_raw_results(filename: str = "experiment_results.csv") -> List[Dict[str,
                 "data_size": int(row["data_size"]),
                 "error_amount": int(row["error_amount"]),
                 "trial": int(row["trial"]),
+                "errors_injected": int(row.get("errors_injected", 0)),
                 "error_detected": row["error_detected"].strip().lower() == "true",
+                "is_valid": row.get("is_valid", "true").strip().lower() == "true",
                 "processing_time": float(row["processing_time"]),
                 "overhead_bits": int(row["overhead_bits"]),
                 "overhead_percentage": float(row["overhead_percentage"])
@@ -32,7 +36,11 @@ def load_raw_results(filename: str = "experiment_results.csv") -> List[Dict[str,
 
 
 def calculate_metrics(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Group trial records and compute statistical metrics per configuration."""
+    """Group trial records and compute statistical metrics per configuration.
+
+    Clean transmissions (0 errors injected) are evaluated for false alarms and accuracy,
+    while corrupted transmissions are evaluated for detection rate.
+    """
     groups: Dict[tuple, Dict[str, Any]] = {}
 
     for row in results:
@@ -47,6 +55,7 @@ def calculate_metrics(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             groups[key] = {
                 "total": 0,
                 "detected": 0,
+                "valid": 0,
                 "processing_time": 0.0,
                 "overhead_bits": 0,
                 "overhead_percentage": 0.0
@@ -56,6 +65,8 @@ def calculate_metrics(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         g["total"] += 1
         if row["error_detected"]:
             g["detected"] += 1
+        if row["is_valid"]:
+            g["valid"] += 1
         g["processing_time"] += row["processing_time"]
         g["overhead_bits"] += row["overhead_bits"]
         g["overhead_percentage"] += row["overhead_percentage"]
@@ -65,10 +76,21 @@ def calculate_metrics(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         technique, error_type, data_size, error_amount = key
         total = val["total"]
         detected = val["detected"]
+        valid = val["valid"]
         undetected = total - detected
 
-        detection_rate = (detected / total) * 100.0 if total > 0 else 0.0
-        undetected_rate = (undetected / total) * 100.0 if total > 0 else 0.0
+        is_clean = (error_type == "clean")
+
+        if is_clean:
+            # Clean transmission: detection rate is N/A; clean accuracy is valid / total
+            detection_rate = 0.0
+            undetected_rate = 0.0
+            clean_accuracy = (valid / total) * 100.0 if total > 0 else 100.0
+        else:
+            detection_rate = (detected / total) * 100.0 if total > 0 else 0.0
+            undetected_rate = (undetected / total) * 100.0 if total > 0 else 0.0
+            clean_accuracy = 100.0
+
         avg_time = val["processing_time"] / total if total > 0 else 0.0
         avg_overhead_bits = val["overhead_bits"] / total if total > 0 else 0.0
         avg_overhead_pct = val["overhead_percentage"] / total if total > 0 else 0.0
@@ -83,6 +105,7 @@ def calculate_metrics(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "undetected": undetected,
             "detection_rate": round(detection_rate, 2),
             "undetected_rate": round(undetected_rate, 2),
+            "clean_accuracy": round(clean_accuracy, 2),
             "average_processing_time": avg_time,
             "average_processing_time_us": round(avg_time * 1e6, 2),
             "average_overhead_bits": avg_overhead_bits,
@@ -111,10 +134,10 @@ def compute_and_save_metrics(
 ) -> List[Dict[str, Any]]:
     """Load raw results, calculate metrics, and save to CSV."""
     if verbose:
-        print(f"Loading experimental results from {input_file}...")
+        print(f"Loading raw experimental data from {input_file}...")
     raw = load_raw_results(input_file)
     if verbose:
-        print(f"Loaded {len(raw):,} raw trials. Aggregating metrics...")
+        print(f"Loaded {len(raw):,} trials. Aggregating performance metrics...")
     metrics = calculate_metrics(raw)
     save_metrics(metrics, output_file)
     if verbose:

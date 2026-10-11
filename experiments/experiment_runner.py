@@ -1,17 +1,17 @@
-"""Experiment Runner for Empirical Evaluation of DCN Error Detection Algorithms.
+"""Experiment Runner for DCN Error Detection Algorithms.
 
-Executes controlled Monte-Carlo trials across:
-- Techniques: Parity (1D), 2D Parity Matrix, Internet Checksum, CRC-8, CRC-16
-- Error Models: Single-bit, Multiple-bit (1 to 8 errors), Burst errors (2 to 16 span)
-- Payload Sizes: 32, 64, 128, 256, 512, 1024 bits
+Executes controlled Monte Carlo trials across:
+- Techniques: VRC / Parity, LRC, Checksum, CRC
+- Error Models: Clean transmission, Single-bit, Multiple-bit, Burst
+- Configurable Data Sizes, Error Magnitudes, and Trial Counts
 
-Supports both Quick Demo Mode (fast execution for live jury) and Full Benchmark Mode.
+Keeps clean transmissions separate from corrupted trials.
 """
 
 import random
 import csv
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from simulation.simulator import simulate
 
@@ -49,7 +49,9 @@ def run_single_config(
             "data_size": data_size,
             "error_amount": error_amount,
             "trial": trial_idx,
+            "errors_injected": sim_res["errors_injected"],
             "error_detected": sim_res["error_detected"],
+            "is_valid": sim_res["is_valid"],
             "processing_time": sim_res["processing_time"],
             "overhead_bits": sim_res["overhead_bits"],
             "overhead_percentage": sim_res["overhead_percentage"]
@@ -59,43 +61,66 @@ def run_single_config(
 
 
 def run_all_experiments(
-    trials: int = 100,
+    techniques: Optional[List[str]] = None,
+    data_sizes: Optional[List[int]] = None,
+    multi_error_amounts: Optional[List[int]] = None,
+    burst_lengths: Optional[List[int]] = None,
+    include_clean: bool = True,
+    trials: int = 50,
     output_file: str = "experiment_results.csv",
     verbose: bool = True
 ) -> List[Dict[str, Any]]:
-    """Execute all experimental sweeps across techniques, error models, and payload sizes.
+    """Execute all experimental sweeps based on configurable parameters.
 
     Args:
-        trials: Number of Monte Carlo trials per configuration (default: 100 for fast run).
-        output_file: CSV destination path.
-        verbose: Whether to print progress to console.
+        techniques: List of techniques (default: VRC / Parity, LRC, Checksum, CRC).
+        data_sizes: List of payload sizes in bits.
+        multi_error_amounts: Multiple-bit error quantities to test.
+        burst_lengths: Burst error lengths to test.
+        include_clean: Whether to include clean transmission benchmark.
+        trials: Number of trials per configuration.
+        output_file: Destination CSV path.
+        verbose: Print progress to console.
     """
-    techniques = [
-        "Parity",
-        "2D-Parity",
-        "Checksum",
-        "CRC"
-    ]
+    if techniques is None:
+        techniques = ["VRC / Parity", "LRC", "Checksum", "CRC"]
 
-    data_sizes = [32, 64, 128, 256, 512, 1024]
+    if data_sizes is None:
+        data_sizes = [32, 64, 128, 256, 512, 1024]
 
-    # Test both odd and even error amounts (1 through 8) to clearly show Parity's behavior
-    multi_error_amounts = [1, 2, 3, 4, 5, 6, 7, 8]
+    if multi_error_amounts is None:
+        multi_error_amounts = [1, 2, 3, 4, 5, 6, 7, 8]
 
-    # Burst error lengths
-    burst_lengths = [2, 4, 6, 8, 12, 16]
+    if burst_lengths is None:
+        burst_lengths = [2, 4, 6, 8, 12, 16]
 
     all_results: List[Dict[str, Any]] = []
     t_start = time.time()
 
     if verbose:
         print("\n" + "=" * 60)
-        print(" RUNNING DCN ERROR DETECTION BENCHMARK SUITE")
-        print(f" Trials per configuration: {trials}")
+        print(" RUNNING DCN BENCHMARK EXPERIMENTS")
+        print(f" Techniques   : {', '.join(techniques)}")
+        print(f" Data Sizes   : {data_sizes} bits")
+        print(f" Multi-Errors : {multi_error_amounts} bits")
+        print(f" Burst Spans  : {burst_lengths} bits")
+        print(f" Trials/Config: {trials}")
         print("=" * 60)
 
     for tech in techniques:
-        # 1. Single bit error sweep across payload sizes
+        # 1. Clean transmission benchmark (separate from corrupted)
+        if include_clean:
+            for sz in data_sizes:
+                res = run_single_config(
+                    technique=tech,
+                    error_type="clean",
+                    data_size=sz,
+                    error_amount=0,
+                    trials=trials
+                )
+                all_results.extend(res)
+
+        # 2. Single-bit error sweep across payload sizes
         for sz in data_sizes:
             res = run_single_config(
                 technique=tech,
@@ -106,30 +131,31 @@ def run_all_experiments(
             )
             all_results.extend(res)
 
-        # 2. Multiple bit errors (using 128-bit payload as reference)
+        # 3. Multiple-bit errors across error magnitudes (using 128-bit payload as reference)
+        ref_size = 128 if 128 in data_sizes else data_sizes[0]
         for err_cnt in multi_error_amounts:
             res = run_single_config(
                 technique=tech,
                 error_type="multiple",
-                data_size=128,
+                data_size=ref_size,
                 error_amount=err_cnt,
                 trials=trials
             )
             all_results.extend(res)
 
-        # 3. Burst errors (using 128-bit payload as reference)
+        # 4. Burst errors across burst lengths (using 128-bit payload as reference)
         for b_len in burst_lengths:
             res = run_single_config(
                 technique=tech,
                 error_type="burst",
-                data_size=128,
+                data_size=ref_size,
                 error_amount=b_len,
                 trials=trials
             )
             all_results.extend(res)
 
         if verbose:
-            print(f"  [COMPLETED] {tech:<12} (all error models & sizes)")
+            print(f"  [COMPLETED] {tech:<14} (All error models evaluated)")
 
     # Save to CSV
     fieldnames = [
@@ -138,7 +164,9 @@ def run_all_experiments(
         "data_size",
         "error_amount",
         "trial",
+        "errors_injected",
         "error_detected",
+        "is_valid",
         "processing_time",
         "overhead_bits",
         "overhead_percentage"
@@ -152,8 +180,8 @@ def run_all_experiments(
     elapsed = time.time() - t_start
     if verbose:
         print("=" * 60)
-        print(f" Benchmark completed in {elapsed:.2f} seconds.")
-        print(f" Total trial data points: {len(all_results):,}")
+        print(f" Completed in {elapsed:.2f} seconds.")
+        print(f" Total generated trial rows: {len(all_results):,}")
         print(f" Saved to: {output_file}")
         print("=" * 60 + "\n")
 
@@ -161,8 +189,7 @@ def run_all_experiments(
 
 
 def main():
-    """CLI entry point for running experiments."""
-    run_all_experiments(trials=100)
+    run_all_experiments(trials=50)
 
 
 if __name__ == "__main__":

@@ -1,13 +1,11 @@
 """Error Generation Module for Digital Communication Networks (DCN).
 
-Models physical layer channel impairments:
-1. Single-bit error: An isolated 1-bit flip caused by brief impulse noise.
-2. Multiple-bit error: Two or more non-consecutive or random bit flips.
-3. Burst error: A contiguous span of bits corrupted where the first and last bits
-   in the burst window are flipped, and intermediate bits may be flipped.
-4. Manual bit flip: Deterministic error injection at exact user-specified indices
-   (essential for jury demonstrations and edge-case testing).
-5. Channel Noise (Bit Error Rate - BER): Probabilistic independent bit-flipping model.
+Supports exactly five physical layer error models:
+1. Clean transmission: Zero bit errors introduced (ideal channel test).
+2. Single-bit error: An isolated 1-bit flip caused by impulse noise.
+3. Multiple-bit error: User-specified number (k) of random bit flips.
+4. Burst error: A contiguous span of corrupted bits where endpoints are inverted.
+5. Manual error injection: Deterministic bit flips at exact user-selected positions.
 """
 
 import random
@@ -16,6 +14,21 @@ from typing import Tuple, List, Union
 
 def _flip_char(c: str) -> str:
     return "1" if c == "0" else "0"
+
+
+def clean_transmission(
+    frame: str,
+    return_indices: bool = False
+) -> Union[str, Tuple[str, List[int]]]:
+    """Transmit frame without introducing any bit errors (clean channel).
+
+    Args:
+        frame: Binary frame string.
+        return_indices: If True, returns (frame, []).
+    """
+    if return_indices:
+        return frame, []
+    return frame
 
 
 def single_bit_error(
@@ -56,7 +69,6 @@ def multiple_bit_error(
     if not frame:
         return ("", []) if return_indices else ""
 
-    # Clamp to avoid random.sample error
     count = max(1, min(int(number_of_errors), len(frame)))
     positions = sorted(random.sample(range(len(frame)), count))
 
@@ -79,13 +91,13 @@ def burst_error(
     """Introduce a burst error of specified span.
 
     In DCN theory (Forouzan/Tanenbaum), a burst error of length L means:
-    - The first bit of the burst is inverted.
-    - The last bit of the burst is inverted.
-    - The (L - 2) intermediate bits may or may not be inverted (random probability).
+    - The first bit of the burst span is inverted.
+    - The last bit of the burst span is inverted.
+    - Intermediate bits may or may not be inverted (50% random probability).
 
     Args:
         frame: Binary frame string.
-        burst_length: Length of the burst span.
+        burst_length: Length of the burst span in bits.
         mode: 'textbook' (first/last flipped, intermediate random) or 'dense' (all flipped).
         return_indices: If True, returns (corrupted_frame, flipped_indices).
     """
@@ -105,7 +117,6 @@ def burst_error(
             corrupted[pos] = _flip_char(corrupted[pos])
             flipped_indices.append(pos)
     else:
-        # Textbook definition:
         # First bit flipped
         corrupted[start] = _flip_char(corrupted[start])
         flipped_indices.append(start)
@@ -144,30 +155,4 @@ def manual_error(
     result_str = "".join(corrupted)
     if return_indices:
         return result_str, sorted(valid_positions)
-    return result_str
-
-
-def ber_channel_error(
-    frame: str,
-    bit_error_rate: float = 0.05,
-    return_indices: bool = False
-) -> Union[str, Tuple[str, List[int]]]:
-    """Simulate a noisy channel where each bit has probability BER of flipping."""
-    corrupted = list(frame)
-    flipped = []
-
-    for i in range(len(frame)):
-        if random.random() < bit_error_rate:
-            corrupted[i] = _flip_char(corrupted[i])
-            flipped.append(i)
-
-    # Ensure at least 1 error occurs if BER > 0 and frame is non-empty
-    if not flipped and bit_error_rate > 0 and frame:
-        forced = random.randrange(len(frame))
-        corrupted[forced] = _flip_char(corrupted[forced])
-        flipped.append(forced)
-
-    result_str = "".join(corrupted)
-    if return_indices:
-        return result_str, sorted(flipped)
     return result_str

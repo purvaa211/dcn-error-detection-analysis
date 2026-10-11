@@ -178,3 +178,48 @@ def verify_checksum_detailed(
     }
 
     return is_valid, details
+
+
+def format_checksum_working(data: str, word_size: int = 8) -> str:
+    """Format step-by-step Internet Checksum calculation for educational display."""
+    checksum_bin, details = calculate_checksum(data, word_size)
+    blocks_bin = details["blocks_bin"]
+    steps = details["steps"]
+    mask = (1 << word_size) - 1
+
+    lines = [
+        "=" * 60,
+        f" INTERNET CHECKSUM ({word_size}-BIT) STEP-BY-STEP CALCULATION",
+        "=" * 60,
+        f" Original Data: {data} ({len(data)} bits)",
+        f" Word Size    : {word_size} bits | Divided into {len(blocks_bin)} block(s)",
+        "-" * 60
+    ]
+
+    for idx, b in enumerate(blocks_bin):
+        lines.append(f"  Word {idx+1}: {b} (0x{int(b, 2):02X})")
+
+    lines.append("-" * 60)
+    lines.append(" 1's Complement Summation (with end-around carry wrap):")
+
+    for s in steps:
+        step_num = s["step"]
+        w_bin = s["word_bin"]
+        p_tot = format(s["previous_total"], f"0{word_size}b")
+        c = s["carry"]
+        n_tot = format(s["new_total"], f"0{word_size}b")
+        lines.append(f"  Step {step_num}: Sum so far = {p_tot} + Word {step_num} ({w_bin})")
+        if c > 0:
+            lines.append(f"          Carry generated = {c} -> wrapped back to sum")
+        lines.append(f"          New Sum = {n_tot} (0x{s['new_total']:02X})")
+
+    tot_val = details["sum_before_complement"]
+    chk_val = details["checksum_val"]
+    lines.append("-" * 60)
+    lines.append(f" Final Sum before complement : {format(tot_val, f'0{word_size}b')} (0x{tot_val:02X})")
+    lines.append(f" Bitwise 1's Complement (NOT): {checksum_bin} (0x{chk_val:02X})")
+    lines.append(f" Checksum to Transmit        : {checksum_bin}")
+    lines.append(f" Transmitted Frame           : {data + checksum_bin}")
+    lines.append("=" * 60)
+
+    return "\n".join(lines)
