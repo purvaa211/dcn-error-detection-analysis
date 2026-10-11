@@ -9,14 +9,15 @@ Interactive Console Interface.
 
 import sys
 import os
-from typing import List, Dict, Any, Optional
+import random
+from typing import List, Dict, Any, Optional, Tuple
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from algorithms.parity import add_vrc, check_vrc, format_vrc_working
-from algorithms.lrc import add_lrc, check_lrc, format_lrc_working
+from algorithms.lrc import add_lrc, check_lrc, calculate_lrc, format_lrc_working
 from algorithms.checksum import add_checksum, verify_checksum_detailed, format_checksum_working
 from algorithms.crc import crc_encode, crc_check_detailed, format_crc_working, CRC_POLYNOMIALS
 from simulation.simulator import simulate, compare_all_techniques
@@ -33,8 +34,11 @@ from visualization.plot_results import generate_all_plots
 
 
 # ======================================================================
-# HELPER UTILITIES: INPUT PARSING & VISUAL FORMATTING
+# SESSION STATE MANAGEMENT
 # ======================================================================
+
+SESSION_DATA: str = "1011011011001100"
+
 
 def clear_screen() -> None:
     """Clear terminal screen."""
@@ -42,10 +46,12 @@ def clear_screen() -> None:
 
 
 def print_banner() -> None:
-    """Display project header banner."""
+    """Display project header banner with current session data."""
     print("=" * 72)
     print("     DATA COMMUNICATION AND COMPUTER NETWORKS (DCN) PROJECT")
     print("      ERROR GENERATION, DETECTION & ANALYSIS SYSTEM")
+    print("=" * 72)
+    print(f"  Current Session Data : {SESSION_DATA} ({len(SESSION_DATA)} bits)")
     print("=" * 72)
 
 
@@ -54,75 +60,180 @@ def text_to_binary(text: str) -> str:
     return "".join(format(ord(c), "08b") for c in text)
 
 
-def get_user_data_input() -> str:
-    """Prompt user to supply data via binary, text, or random generation."""
-    print("\n--- DATA INPUT SELECTION ---")
-    print("  [1] Enter Custom Binary String (e.g. 110100110011)")
-    print("  [2] Enter Plain Text String    (auto-converted to 8-bit binary ASCII)")
-    print("  [3] Generate Random Binary Bits")
+def parse_user_data(user_input: str, default: str = "1011011011001100") -> str:
+    """Parse raw user input into a validated binary string."""
+    cleaned = user_input.strip()
+    if not cleaned:
+        return default
 
-    choice = input("\nEnter choice [1-3] (default 1): ").strip()
+    # 1. Direct binary string
+    if all(c in "01" for c in cleaned):
+        return cleaned
 
-    if choice == "2":
-        user_txt = input("Enter text string: ").strip()
-        if not user_txt:
-            user_txt = "DCN"
-        bin_data = text_to_binary(user_txt)
-        print(f" -> ASCII Text: '{user_txt}'")
-        print(f" -> Converted Binary ({len(bin_data)} bits): {bin_data}")
-        return bin_data
+    # 2. Random generation request ('r' or 'random')
+    if cleaned.lower() in ("r", "random"):
+        return "".join(random.choice("01") for _ in range(16))
 
-    elif choice == "3":
-        length_input = input("Enter number of bits to generate [8-256] (default 16): ").strip()
-        bit_len = int(length_input) if length_input.isdigit() else 16
-        bit_len = max(8, min(bit_len, 512))
-        import random
-        bin_data = "".join(random.choice("01") for _ in range(bit_len))
-        print(f" -> Generated Random Binary ({bit_len} bits): {bin_data}")
-        return bin_data
+    # 3. Plain text string -> convert to 8-bit ASCII binary
+    bin_str = text_to_binary(cleaned)
+    print(f"  -> Converted ASCII '{cleaned}' to {len(bin_str)}-bit binary.")
+    return bin_str
 
+
+def setup_initial_data() -> None:
+    """Prompt user once at startup to set or generate session data."""
+    global SESSION_DATA
+    print("\n--- INITIAL DATA SETUP ---")
+    print("Enter binary string, plain text, 'r' for random 16 bits,")
+    print("or press Enter to use default [1011011011001100]:")
+    raw = input("Input > ").strip()
+    SESSION_DATA = parse_user_data(raw, default="1011011011001100")
+    print(f"Active Session Data: {SESSION_DATA} ({len(SESSION_DATA)} bits)\n")
+
+
+def prompt_change_session_data() -> None:
+    """Explicitly change the session data when the user requests it."""
+    global SESSION_DATA
+    print(f"\nCurrent Session Data: {SESSION_DATA} ({len(SESSION_DATA)} bits)")
+    raw = input("Enter new binary, text, or 'r' for random [Enter to keep]: ").strip()
+    if raw:
+        SESSION_DATA = parse_user_data(raw, default=SESSION_DATA)
+        print(f"Session data updated: {SESSION_DATA} ({len(SESSION_DATA)} bits)")
     else:
-        while True:
-            raw_bin = input("Enter binary string (0s and 1s): ").strip()
-            if not raw_bin:
-                raw_bin = "1011011011001100"
-                print(f" -> Using default binary: {raw_bin}")
-                return raw_bin
-            if all(c in "01" for c in raw_bin):
-                return raw_bin
-            print(" [!] Invalid input. String must only contain '0' and '1'. Please retry.")
+        print("Session data unchanged.")
 
 
-def highlight_corrupted_bits(original: str, corrupted: str, flipped_indices: List[int]) -> str:
+def check_and_offer_data_change(current: str) -> str:
+    """Offer a fast prompt to change session data or press Enter to keep."""
+    global SESSION_DATA
+    print(f"\nCurrent Data: {current} ({len(current)} bits)")
+    ans = input("Change data? [y/N]: ").strip().lower()
+    if ans == "y":
+        raw = input("Enter new binary, text, or 'r' for random: ").strip()
+        SESSION_DATA = parse_user_data(raw, default=current)
+        print(f"Updated Data: {SESSION_DATA} ({len(SESSION_DATA)} bits)")
+        return SESSION_DATA
+    return current
+
+
+def highlight_corrupted_bits(corrupted_len: int, flipped_indices: List[int]) -> str:
     """Produce a terminal pointer string showing exactly where errors occurred."""
-    markers = [" "] * len(corrupted)
+    markers = [" "] * corrupted_len
     for idx in flipped_indices:
-        if 0 <= idx < len(markers):
+        if 0 <= idx < corrupted_len:
             markers[idx] = "^"
     return "".join(markers)
 
 
 # ======================================================================
-# 1. SIMULATE DATA TRANSMISSION
+# SIMPLIFIED ERROR SELECTION (EXACTLY 5 MODELS, NO PRESET SCENARIOS)
+# ======================================================================
+
+def get_error_model_selection(payload_len: int) -> Tuple[str, any, List[int]]:
+    """Prompt user to select from exactly five error models and their parameters.
+
+    Returns:
+        tuple (error_type, error_amount, positions)
+    """
+    print("\nSelect Error Model:")
+    print("  1. Clean transmission")
+    print("  2. Single-bit error")
+    print("  3. Multiple-bit error")
+    print("  4. Burst error")
+    print("  5. Manual error injection")
+
+    choice = input("\nChoice [1-5] (default 1): ").strip()
+
+    # Model 1: Clean transmission
+    if choice == "1" or not choice:
+        return "clean", 0, []
+
+    # Model 2: Single-bit error
+    elif choice == "2":
+        pos_in = input(f"Bit position [0 to {payload_len - 1}] (Enter for random): ").strip()
+        if pos_in.isdigit() and 0 <= int(pos_in) < payload_len:
+            pos = int(pos_in)
+        else:
+            pos = random.randrange(payload_len)
+            print(f"  -> Random position selected: {pos}")
+        return "single", 1, [pos]
+
+    # Model 3: Multiple-bit error
+    elif choice == "3":
+        num_in = input(f"Number of bits to flip [1 to {payload_len}] (default 2): ").strip()
+        k = int(num_in) if num_in.isdigit() and 1 <= int(num_in) <= payload_len else 2
+
+        pos_in = input(f"Positions [0 to {payload_len - 1}, comma-separated] (Enter for random): ").strip()
+        if pos_in:
+            parsed = [int(p.strip()) for p in pos_in.split(",") if p.strip().isdigit() and 0 <= int(p.strip()) < payload_len]
+            parsed = sorted(list(set(parsed)))
+            if parsed:
+                positions = parsed
+            else:
+                positions = sorted(random.sample(range(payload_len), min(k, payload_len)))
+        else:
+            positions = sorted(random.sample(range(payload_len), min(k, payload_len)))
+            print(f"  -> Random positions selected: {positions}")
+
+        return "multiple", len(positions), positions
+
+    # Model 4: Burst error
+    elif choice == "4":
+        len_in = input(f"Burst length in bits [2 to {payload_len}] (default 4): ").strip()
+        burst_len = int(len_in) if len_in.isdigit() and 2 <= int(len_in) <= payload_len else min(4, payload_len)
+
+        max_start = payload_len - burst_len
+        start_in = input(f"Starting position [0 to {max_start}] (Enter for random): ").strip()
+        if start_in.isdigit() and 0 <= int(start_in) <= max_start:
+            start = int(start_in)
+        else:
+            start = random.randint(0, max_start)
+            print(f"  -> Random start selected: {start}")
+
+        # Textbook burst: first & last bit inverted, intermediate bits 50% random
+        end = start + burst_len - 1
+        flipped = [start, end]
+        for p in range(start + 1, end):
+            if random.random() < 0.5:
+                flipped.append(p)
+        flipped = sorted(list(set(flipped)))
+        return "burst", burst_len, flipped
+
+    # Model 5: Manual error injection
+    elif choice == "5":
+        while True:
+            pos_in = input(f"Enter bit positions to flip [0 to {payload_len - 1}, comma-separated]: ").strip()
+            parsed = [int(p.strip()) for p in pos_in.split(",") if p.strip().isdigit() and 0 <= int(p.strip()) < payload_len]
+            parsed = sorted(list(set(parsed)))
+            if parsed:
+                return "manual", parsed, parsed
+            print(f"  [!] Please enter valid integers between 0 and {payload_len - 1}.")
+
+    else:
+        return "clean", 0, []
+
+
+# ======================================================================
+# 1. SIMULATE TRANSMISSION
 # ======================================================================
 
 def run_simulate_transmission() -> None:
-    """Option 1: Simulate data transmission pipeline."""
+    """Option 1: Simulate data transmission pipeline using session data."""
+    global SESSION_DATA
     print("\n" + "=" * 72)
-    print(" 1. SIMULATE DATA TRANSMISSION")
+    print(" 1. SIMULATE TRANSMISSION")
     print("=" * 72)
 
-    # 1. Input Data
-    data = get_user_data_input()
+    data = check_and_offer_data_change(SESSION_DATA)
 
-    # 2. Detection Technique
-    print("\n--- SELECT DETECTION TECHNIQUE ---")
+    # 1. Detection Technique
+    print("\nSelect Detection Technique:")
     print("  [1] VRC / Parity (Vertical Redundancy Check)")
     print("  [2] LRC          (Longitudinal Redundancy Check)")
     print("  [3] Checksum     (Internet Checksum - 8-bit)")
     print("  [4] CRC          (Cyclic Redundancy Check - CRC-8)")
 
-    tech_choice = input("\nSelect technique [1-4] (default 4): ").strip()
+    tech_choice = input("\nChoice [1-4] (default 4): ").strip()
     tech_map = {
         "1": "VRC / Parity",
         "2": "LRC",
@@ -131,45 +242,16 @@ def run_simulate_transmission() -> None:
     }
     technique = tech_map.get(tech_choice, "CRC")
 
-    # 3. Error Model (Exactly 5 models)
-    print("\n--- SELECT ERROR GENERATION MODEL ---")
-    print("  [1] Clean transmission       (Zero error introduced)")
-    print("  [2] Single-bit error         (Random isolated bit flip)")
-    print("  [3] Multiple-bit error       (Specify number of bit flips)")
-    print("  [4] Burst error              (Contiguous span of noise)")
-    print("  [5] Manual error injection   (Select exact bit positions to flip)")
-
-    err_choice = input("\nSelect error model [1-5] (default 2): ").strip()
-    err_type = "single"
-    err_amount: any = 1
-
-    if err_choice == "1":
-        err_type = "clean"
-        err_amount = 0
-    elif err_choice == "3":
-        err_type = "multiple"
-        val = input("Enter number of bit errors to inject (default 2): ").strip()
-        err_amount = int(val) if val.isdigit() else 2
-    elif err_choice == "4":
-        err_type = "burst"
-        val = input("Enter burst length in bits (default 4): ").strip()
-        err_amount = int(val) if val.isdigit() else 4
-    elif err_choice == "5":
-        err_type = "manual"
-        val = input("Enter 0-based bit positions to flip separated by commas (e.g. 2, 5): ").strip()
-        err_amount = [int(p.strip()) for p in val.split(",") if p.strip().isdigit()]
-        if not err_amount:
-            err_amount = [2]
-    else:
-        err_type = "single"
-        err_amount = 1
+    # 2. Error Model
+    err_type, err_amount, chosen_positions = get_error_model_selection(len(data))
 
     # Execute simulation
     sim = simulate(
         data=data,
         technique=technique,
         error_type=err_type,
-        error_amount=err_amount
+        error_amount=err_amount,
+        forced_indices=chosen_positions if err_type != "clean" else []
     )
 
     # Display Sender -> Channel -> Receiver Pipeline
@@ -191,7 +273,7 @@ def run_simulate_transmission() -> None:
     print(f"  Error Positions  : {sim['flipped_indices']}")
     print(f"  Protected Frame  : {sim['protected_frame']}")
     print(f"  Corrupted Frame  : {sim['corrupted_frame']}")
-    pointer_str = highlight_corrupted_bits(sim['protected_frame'], sim['corrupted_frame'], sim['flipped_indices'])
+    pointer_str = highlight_corrupted_bits(len(sim['corrupted_frame']), sim['flipped_indices'])
     print(f"  Error Locations  : {pointer_str}")
 
     print("\n[STAGE 3: RECEIVER & VERIFICATION]")
@@ -199,7 +281,7 @@ def run_simulate_transmission() -> None:
     print(f"  Checking Latency : {sim['checking_time'] * 1e6:.2f} us")
     print(f"  Total Proc. Time : {sim['processing_time'] * 1e6:.2f} us")
 
-    # Diagnostic details
+    # Diagnostics
     if "CRC" in sim["technique"]:
         rem = sim["diagnostics"].get("syndrome_remainder", "")
         print(f"  CRC Remainder    : R = '{rem}' (Expected: {'0' * len(rem)})")
@@ -233,74 +315,62 @@ def run_simulate_transmission() -> None:
 
 
 # ======================================================================
-# 2. COMPARE ERROR DETECTION TECHNIQUES
+# 2. COMPARE DETECTION TECHNIQUES
 # ======================================================================
 
 def run_compare_techniques() -> None:
     """Option 2: Compare all four techniques on same input and equivalent errors."""
+    global SESSION_DATA
     print("\n" + "=" * 72)
-    print(" 2. COMPARE ERROR DETECTION TECHNIQUES")
+    print(" 2. COMPARE DETECTION TECHNIQUES")
     print("=" * 72)
 
-    data = get_user_data_input()
+    data = check_and_offer_data_change(SESSION_DATA)
 
-    print("\n--- SELECT ERROR SCENARIO TO TEST ON ALL FOUR TECHNIQUES ---")
-    print("  [1] Clean transmission")
-    print("  [2] Single-bit error       (1 bit flip)")
-    print("  [3] Two-bit error          (2 bit flips -> Classic Parity Failure Test)")
-    print("  [4] Four-bit error         (4 bit flips)")
-    print("  [5] Burst error            (span of 6 bits)")
-    print("  [6] Manual error injection (select bit positions to flip)")
+    # Prompt error model only once (no preset scenario choices)
+    err_type, err_amount, chosen_positions = get_error_model_selection(len(data))
 
-    choice = input("\nSelect scenario [1-6] (default 3): ").strip()
-    if choice == "1":
-        err_type, err_amount = "clean", 0
-    elif choice == "2":
-        err_type, err_amount = "single", 1
-    elif choice == "4":
-        err_type, err_amount = "multiple", 4
-    elif choice == "5":
-        err_type, err_amount = "burst", 6
-    elif choice == "6":
-        val = input("Enter comma-separated bit positions to flip: ").strip()
-        pos = [int(p) for p in val.split(",") if p.strip().isdigit()]
-        err_type, err_amount = "manual", pos if pos else [1, 3]
-    else:
-        err_type, err_amount = "multiple", 2
+    if err_type != "clean":
+        print(f"\n  Error injection mapping: Corrupting payload bit positions {chosen_positions}")
+        print("  Identical payload corruption is applied across VRC, LRC, Checksum, and CRC.")
 
-    # Run all 4 techniques on the exact same input & equivalent error pattern
-    results = compare_all_techniques(data, error_type=err_type, error_amount=err_amount)
+    # Run all 4 techniques with exact same payload corruption
+    results = compare_all_techniques(
+        data=data,
+        error_type=err_type,
+        error_amount=chosen_positions if err_type != "clean" else 0
+    )
 
     print("\n" + "=" * 80)
     print(f" COMPARATIVE EVALUATION MATRIX ({len(data)}-bit Input)")
-    print(f" Scenario: {err_type.upper()} error (magnitude: {err_amount})")
+    print(f" Error Model: {err_type.upper()} | Flipped Bit Positions: {chosen_positions}")
     print("=" * 80)
 
-    header = f"{'Technique':<16} | {'Overhead':<14} | {'Proc. Time':<12} | {'Detection Result':<18} | {'Verdict'}"
+    header = f"{'Technique':<16} | {'Redundant Bits':<16} | {'Proc. Time':<12} | {'Detection Result':<18} | {'Final Verdict'}"
     print(header)
     print("-" * 80)
 
     for r in results:
         tech = r["technique"]
-        ovh = f"{r['overhead_bits']}b ({r['overhead_percentage']:.1f}%)"
+        ovh = f"{r['overhead_bits']} bit(s) ({r['overhead_percentage']:.1f}%)"
         time_us = f"{r['processing_time'] * 1e6:.2f} us"
         if r["errors_injected"] == 0:
             det_str = "CLEAN [VALID]"
-            verdict = "Accepted"
+            verdict = "Frame Accepted"
         elif r["error_detected"]:
             det_str = "YES [DETECTED]"
-            verdict = "Rejected"
+            verdict = "Frame Rejected"
         else:
             det_str = "NO  [MISSED!]"
             verdict = "Undetected Error"
 
-        print(f"{tech:<16} | {ovh:<14} | {time_us:<12} | {det_str:<18} | {verdict}")
+        print(f"{tech:<16} | {ovh:<16} | {time_us:<12} | {det_str:<18} | {verdict}")
 
     print("=" * 80)
     print("\nKEY OBSERVATIONS:")
-    print(" - VRC / Parity fails whenever an even number of bits flip (d_min = 2).")
-    print(" - LRC catches errors across different columns but fails on same-column pairs.")
-    print(" - Checksum detects most errors with low CPU latency but is vulnerable to compensating flips.")
+    print(" - VRC / Parity fails whenever an even number of bits flip in the data (d_min = 2).")
+    print(" - LRC catches errors across different columns but misses same-column pairs.")
+    print(" - Checksum operates with low CPU overhead but is vulnerable to compensating flips.")
     print(" - CRC provides mathematically guaranteed detection for burst errors <= degree.\n")
 
 
@@ -310,37 +380,40 @@ def run_compare_techniques() -> None:
 
 def run_view_algorithm_working() -> None:
     """Option 3: Show step-by-step VRC, LRC, Checksum, and CRC calculations."""
+    global SESSION_DATA
     print("\n" + "=" * 72)
     print(" 3. VIEW ALGORITHM WORKING")
     print("=" * 72)
 
-    print("  [1] VRC / Parity Step-by-Step Working")
-    print("  [2] LRC          Step-by-Step Working")
-    print("  [3] Checksum     Step-by-Step Working")
-    print("  [4] CRC          Step-by-Step Working (Modulo-2 Division)")
+    data = check_and_offer_data_change(SESSION_DATA)
+
+    print("\nSelect Algorithm to View:")
+    print("  [1] VRC / Parity Working")
+    print("  [2] LRC          Working")
+    print("  [3] Checksum     Working")
+    print("  [4] CRC          Working (Modulo-2 Division)")
     print("  [5] View All Four Algorithms")
 
-    c = input("\nSelect algorithm to view [1-5] (default 5): ").strip()
-    data = input("Enter binary string to calculate (default: 1101001100101101): ").strip()
-    if not data or not all(b in "01" for b in data):
-        data = "1101001100101101"
+    c = input("\nChoice [1-5] (default 5): ").strip()
+    if not c:
+        c = "5"
 
-    print(f"\nUsing Input Data ({len(data)} bits): {data}\n")
+    print(f"\nCalculating for Data ({len(data)} bits): {data}\n")
 
-    if c == "1" or c == "5":
+    if c in ("1", "5"):
         print(format_vrc_working(data, mode="even"))
         print()
 
-    if c == "2" or c == "5":
-        _, lrc_info = calculate_lrc(data, block_size=8)
-        print(format_lrc_working(lrc_info))
+    if c in ("2", "5"):
+        # Fixed: calculate_lrc is properly imported and format_lrc_working handles data directly
+        print(format_lrc_working(data, block_size=8))
         print()
 
-    if c == "3" or c == "5":
+    if c in ("3", "5"):
         print(format_checksum_working(data, word_size=8))
         print()
 
-    if c == "4" or c == "5":
+    if c in ("4", "5"):
         print(format_crc_working(data, generator="100000111"))
         print()
 
@@ -350,19 +423,15 @@ def run_view_algorithm_working() -> None:
 # ======================================================================
 
 def run_experiments_and_graphs() -> None:
-    """Option 4: Configure experiments, generate datasets, and create 4 graphs."""
+    """Option 4: Configure benchmark settings, generate datasets and 4 graphs."""
     print("\n" + "=" * 72)
     print(" 4. RUN EXPERIMENTS AND VIEW GRAPHS")
     print("=" * 72)
 
-    print("Configure Experiment Parameters:")
-
-    # Trial count
-    trials_in = input("  Trials per configuration [default: 50]: ").strip()
-    trials = int(trials_in) if trials_in.isdigit() and int(trials_in) > 0 else 50
+    print("Configure Benchmark Settings (press Enter to accept default):")
 
     # Data sizes
-    sizes_in = input("  Data sizes in bits comma-separated [default: 32, 64, 128, 256, 512, 1024]: ").strip()
+    sizes_in = input("  Data sizes in bits [default: 32, 64, 128, 256, 512, 1024]: ").strip()
     if sizes_in:
         sizes = [int(s.strip()) for s in sizes_in.split(",") if s.strip().isdigit()]
     else:
@@ -371,7 +440,7 @@ def run_experiments_and_graphs() -> None:
         sizes = [32, 64, 128, 256, 512, 1024]
 
     # Error magnitudes for multiple-bit errors
-    mag_in = input("  Multiple-bit error magnitudes comma-separated [default: 1, 2, 3, 4, 5, 6, 7, 8]: ").strip()
+    mag_in = input("  Multiple-bit error magnitudes [default: 1, 2, 3, 4, 5, 6, 7, 8]: ").strip()
     if mag_in:
         mags = [int(m.strip()) for m in mag_in.split(",") if m.strip().isdigit()]
     else:
@@ -380,7 +449,7 @@ def run_experiments_and_graphs() -> None:
         mags = [1, 2, 3, 4, 5, 6, 7, 8]
 
     # Burst lengths
-    burst_in = input("  Burst lengths in bits comma-separated [default: 2, 4, 6, 8, 12, 16]: ").strip()
+    burst_in = input("  Burst lengths in bits [default: 2, 4, 6, 8, 12, 16]: ").strip()
     if burst_in:
         bursts = [int(b.strip()) for b in burst_in.split(",") if b.strip().isdigit()]
     else:
@@ -388,7 +457,11 @@ def run_experiments_and_graphs() -> None:
     if not bursts:
         bursts = [2, 4, 6, 8, 12, 16]
 
-    print("\nExecuting experiment suite...")
+    # Trial count
+    trials_in = input("  Trials per configuration [default: 50]: ").strip()
+    trials = int(trials_in) if trials_in.isdigit() and int(trials_in) > 0 else 50
+
+    print("\nExecuting experiment benchmark suite...")
     run_all_experiments(
         data_sizes=sizes,
         multi_error_amounts=mags,
@@ -397,23 +470,11 @@ def run_experiments_and_graphs() -> None:
         verbose=True
     )
 
-    print("Aggregating metrics (keeping clean transmissions separate from corrupted trials)...")
+    print("Aggregating metrics (clean transmissions kept separate from corrupted trials)...")
     compute_and_save_metrics(verbose=True)
 
-    print("Generating the four required analytical graphs...")
-    charts = generate_all_plots()
-
-    open_q = input("\nPreview generated graphs in windows? [y/N]: ").strip().lower()
-    if open_q == "y":
-        import matplotlib.pyplot as plt
-        for chart_path in charts:
-            if os.path.exists(chart_path):
-                img = plt.imread(chart_path)
-                plt.figure(figsize=(10, 6))
-                plt.imshow(img)
-                plt.axis("off")
-                plt.title(f"{os.path.basename(chart_path)} (Close window to see next)")
-                plt.show()
+    print("Generating the four analytical graphs...")
+    generate_all_plots()
 
 
 # ======================================================================
@@ -421,14 +482,21 @@ def run_experiments_and_graphs() -> None:
 # ======================================================================
 
 def main_menu() -> None:
-    """Main interactive driver with exactly the 5 required menu options."""
+    """Main interactive driver with exactly the five required options."""
+    # 1. Setup session data once at startup
+    print_banner()
+    setup_initial_data()
+    clear_screen()
+
+    # 2. Main loop
     while True:
         print_banner()
-        print("  1. Simulate Data Transmission")
-        print("  2. Compare Error Detection Techniques")
+        print("  1. Simulate Transmission")
+        print("  2. Compare Detection Techniques")
         print("  3. View Algorithm Working")
         print("  4. Run Experiments and View Graphs")
         print("  5. Exit")
+        print("  [C] Change Session Data")
         print("=" * 72)
 
         choice = input("\nEnter your choice [1-5]: ").strip()
@@ -442,8 +510,10 @@ def main_menu() -> None:
         elif choice == "4":
             run_experiments_and_graphs()
         elif choice == "5":
-            print("\nExiting DCN Error Detection System. Thank you!\n")
+            print("\nExiting DCN Error Detection System. Goodbye!\n")
             break
+        elif choice.lower() == "c":
+            prompt_change_session_data()
         else:
             print(" [!] Invalid option. Please enter a number between 1 and 5.")
 

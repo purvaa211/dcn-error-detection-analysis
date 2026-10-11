@@ -14,7 +14,7 @@ DCN Characteristics:
 - Detects burst errors of length <= block width (8 bits).
 """
 
-from typing import Tuple, Dict, Any, List
+from typing import Tuple, Dict, Any, List, Union
 
 
 def pad_to_block_boundary(data: str, block_size: int = 8) -> Tuple[str, int]:
@@ -144,10 +144,18 @@ def check_lrc(frame: str, block_size: int = 8) -> Tuple[bool, Dict[str, Any]]:
     return is_valid, details
 
 
-def format_lrc_working(details: Dict[str, Any]) -> str:
-    """Format step-by-step LRC table for educational display."""
+def format_lrc_working(data_or_details: Union[str, Dict[str, Any]], block_size: int = 8) -> str:
+    """Format step-by-step LRC table for educational display.
+    
+    Accepts either a binary string payload or an existing details dictionary.
+    """
+    if isinstance(data_or_details, str):
+        _, details = calculate_lrc(data_or_details, block_size=block_size)
+    else:
+        details = data_or_details
+
     blocks = details.get("blocks", details.get("data_blocks", []))
-    block_size = details.get("block_size", 8)
+    block_size = details.get("block_size", block_size)
     lrc_block = details.get("lrc_block", details.get("expected_lrc", ""))
     counts = details.get("col_ones_counts", details.get("col_counts", []))
     failed_cols = set(details.get("failed_columns", []))

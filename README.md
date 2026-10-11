@@ -95,25 +95,35 @@ When you run `python main.py`, the menu appears with exactly these five options:
      DATA COMMUNICATION AND COMPUTER NETWORKS (DCN) PROJECT
       ERROR GENERATION, DETECTION & ANALYSIS SYSTEM
 ========================================================================
-  1. Simulate Data Transmission
-  2. Compare Error Detection Techniques
+  Current Session Data : 1011011011001100 (16 bits)
+========================================================================
+  1. Simulate Transmission
+  2. Compare Detection Techniques
   3. View Algorithm Working
   4. Run Experiments and View Graphs
   5. Exit
+  [C] Change Session Data
 ========================================================================
 ```
 
 ### Feature Details:
 
-- **1. Simulate Data Transmission:**
-  - Lets users choose custom binary, ASCII text (auto-converted to binary), or random bits.
-  - Select any of the 4 detection techniques: **VRC / Parity**, **LRC**, **Checksum**, or **CRC**.
-  - Select any of the 5 error models: **Clean**, **Single-bit**, **Multiple-bit**, **Burst**, or **Manual bit flips**.
+- **Session Data Reuse:**
+  - Input data is configured once at startup (binary, ASCII text, or random bits) and stored in session state.
+  - Automatically reused across Options 1, 2, and 3 without asking the user repeatedly.
+  - A simple prompt (`Change data? [y/N]`) or pressing `[C]` allows updating session data anytime.
+
+- **1. Simulate Transmission:**
+  - Uses current session data.
+  - User selects detection technique (**VRC / Parity**, **LRC**, **Checksum**, **CRC**).
+  - User selects error model (**Clean**, **Single-bit**, **Multiple-bit**, **Burst**, **Manual**) and only the necessary parameters.
   - Displays the full **Sender** $\to$ **Channel** (with visual `^` pointers at error positions) $\to$ **Receiver** $\to$ **Final Verdict** pipeline.
 
-- **2. Compare Error Detection Techniques:**
-  - Evaluates all four techniques (**VRC / Parity**, **LRC**, **Checksum**, and **CRC**) on the **exact same input data** and **equivalent error conditions**.
-  - Displays a side-by-side comparison matrix showing Overhead (bits and %), Processing Time ($\mu s$), Detection Result, and Verdict.
+- **2. Compare Detection Techniques:**
+  - Uses current session data.
+  - User specifies the error model only once (no preset fixed scenario lists).
+  - Automatically evaluates **VRC / Parity**, **LRC**, **Checksum**, and **CRC** on identical payload error positions.
+  - Displays a single comparative table showing Overhead (bits and %), Processing Time ($\mu s$), Detection Result, and Final Verdict.
 
 - **3. View Algorithm Working:**
   - Displays step-by-step mathematical traces:
