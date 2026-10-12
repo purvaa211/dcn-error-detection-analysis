@@ -154,21 +154,3 @@ When you run `python main.py`, the menu appears with exactly these five options:
 
 ---
 
-## 6. DCN Viva / Jury Question & Answer Guide
-
-### Q1: Why does VRC (Single Parity) fail to detect two-bit errors?
-> **Answer:** Parity check has a minimum Hamming distance of $d_{min} = 2$. It can only guarantee detection for $d_{min} - 1 = 1$ bit error. When an even number of bits (such as 2, 4, or 6) are inverted, the parity (evenness or oddness of 1s) remains unchanged, resulting in an undetected error.
-
-### Q2: What is Longitudinal Redundancy Check (LRC) and how does it differ from VRC?
-> **Answer:** In LRC, data is organized into blocks (rows), and parity is computed for each column across all rows to form an LRC block check byte. While VRC fails if two bits flip in the same character/row, LRC detects them because they affect different columns. LRC only fails if an even number of bit errors occur in the exact same column position across different rows.
-
-### Q3: What is the weakness of the Internet Checksum?
-> **Answer:** The Internet Checksum (RFC 1071) uses 1's complement addition with end-around carry. Its main vulnerability is **compensating errors**—if one bit is flipped from 0 to 1 and another bit in the same column in another word is flipped from 1 to 0, the sum remains identical, and the error goes undetected. It is also insensitive to transposition of whole words.
-
-### Q4: What makes CRC the preferred error detection technique in Data Link protocols?
-> **Answer:** CRC is based on polynomial modulo-2 arithmetic. If generator polynomial $G(x)$ of degree $r$ satisfies standard conditions:
-> - It detects 100% of single-bit errors (if $G(x)$ has $\ge 2$ terms).
-> - It detects 100% of double-bit errors (if $G(x)$ does not divide $x^k + 1$).
-> - It detects 100% of odd-bit errors (if $G(x)$ contains $(x+1)$ as a factor).
-> - It detects 100% of burst errors of length $L \le r$.
-> - It is implemented efficiently in hardware using linear feedback shift registers (LFSRs).
