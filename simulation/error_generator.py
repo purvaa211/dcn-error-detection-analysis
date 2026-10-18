@@ -138,6 +138,118 @@ def burst_error(
     return result_str
 
 
+def consecutive_burst_error(
+    frame: str,
+    burst_length: int,
+    start_position: Union[int, None] = None,
+    return_indices: bool = False
+) -> Union[str, Tuple[str, List[int]]]:
+    """Introduce consecutive burst corruption (dense burst where 100% of bits in span are inverted).
+
+    Args:
+        frame: Binary frame string.
+        burst_length: Number of consecutive bits to invert.
+        start_position: Optional explicit start index. If None or invalid, chosen randomly.
+        return_indices: If True, returns (corrupted_frame, flipped_indices).
+    """
+    if not frame:
+        return ("", []) if return_indices else ""
+
+    span = max(1, min(int(burst_length), len(frame)))
+    max_start = len(frame) - span
+
+    if start_position is not None and 0 <= int(start_position) <= max_start:
+        start = int(start_position)
+    else:
+        start = random.randint(0, max_start)
+
+    corrupted = list(frame)
+    flipped_indices = []
+
+    for pos in range(start, start + span):
+        corrupted[pos] = _flip_char(corrupted[pos])
+        flipped_indices.append(pos)
+
+    result_str = "".join(corrupted)
+    if return_indices:
+        return result_str, flipped_indices
+    return result_str
+
+
+def multiple_burst_error(
+    frame: str,
+    num_bursts: int = 2,
+    burst_length: int = 3,
+    return_indices: bool = False
+) -> Union[str, Tuple[str, List[int]]]:
+    """Introduce multiple separated burst episodes across the frame.
+
+    Simulates recurring interference bursts (e.g. periodic impulse spikes or multi-path
+    fading) separated by clean bit intervals.
+
+    Args:
+        frame: Binary frame string.
+        num_bursts: Number of distinct burst episodes (default: 2).
+        burst_length: Length of each burst episode in bits (default: 3).
+        return_indices: If True, returns (corrupted_frame, flipped_indices).
+    """
+    if not frame:
+        return ("", []) if return_indices else ""
+
+    frame_len = len(frame)
+    num_b = max(2, int(num_bursts))
+    b_len = max(1, int(burst_length))
+
+    # Ensure bursts fit into the frame with at least 1 clean bit between them if possible
+    while num_b * b_len + (num_b - 1) > frame_len and b_len > 1:
+        b_len -= 1
+
+    if num_b * b_len > frame_len:
+        num_b = max(1, frame_len // max(1, b_len))
+
+    # Divide frame into num_b partitions and place one burst within each partition
+    partition_size = frame_len // num_b
+    corrupted = list(frame)
+    flipped_indices: List[int] = []
+
+    for b_idx in range(num_b):
+        part_start = b_idx * partition_size
+        part_end = (b_idx + 1) * partition_size if b_idx < num_b - 1 else frame_len
+        avail_span = part_end - part_start
+
+        actual_len = min(b_len, avail_span)
+        if actual_len < 1:
+            continue
+
+        max_offset = avail_span - actual_len
+        start_pos = part_start + (random.randint(0, max_offset) if max_offset > 0 else 0)
+        end_pos = start_pos + actual_len - 1
+
+        if actual_len <= 2:
+            for p in range(start_pos, start_pos + actual_len):
+                corrupted[p] = _flip_char(corrupted[p])
+                flipped_indices.append(p)
+        else:
+            # First bit flipped
+            corrupted[start_pos] = _flip_char(corrupted[start_pos])
+            flipped_indices.append(start_pos)
+
+            # Intermediate bits flipped with 50% probability
+            for p in range(start_pos + 1, end_pos):
+                if random.random() < 0.5:
+                    corrupted[p] = _flip_char(corrupted[p])
+                    flipped_indices.append(p)
+
+            # Last bit flipped
+            corrupted[end_pos] = _flip_char(corrupted[end_pos])
+            flipped_indices.append(end_pos)
+
+    result_str = "".join(corrupted)
+    if return_indices:
+        return result_str, sorted(list(set(flipped_indices)))
+    return result_str
+
+
 def manual_error(
     frame: str,
     positions: List[int],

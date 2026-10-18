@@ -102,8 +102,10 @@
                                 <option value="clean">1. Clean transmission (No channel errors)</option>
                                 <option value="single" selected>2. Single-bit error (Random or specified bit)</option>
                                 <option value="multiple">3. Multiple-bit error (Independent bit flips)</option>
-                                <option value="burst">4. Burst error (Contiguous span error)</option>
-                                <option value="manual">5. Manual error injection (Specify bit indices)</option>
+                                <option value="burst">4. Burst error (Textbook span error)</option>
+                                <option value="consecutive_burst">5. Consecutive burst corruption (Solid contiguous span)</option>
+                                <option value="multiple_burst">6. Multiple burst errors (Separated burst episodes)</option>
+                                <option value="manual">7. Manual error injection (Specify bit indices)</option>
                             </select>
                         </div>
 
@@ -116,6 +118,26 @@
                         <div id="err-param-burst" class="form-group-sub" style="display:none;">
                             <label for="sim-burst-len">Burst error span length (bits):</label>
                             <input type="number" id="sim-burst-len" class="form-control" value="4" min="2" max="64">
+                        </div>
+
+                        <div id="err-param-consec-burst" class="form-group-sub" style="display:none;">
+                            <label for="sim-consec-burst-len">Consecutive burst span length (bits):</label>
+                            <input type="number" id="sim-consec-burst-len" class="form-control" value="4" min="2" max="64">
+                            <span class="form-hint">Every contiguous bit within this window will be inverted (100% continuous corruption).</span>
+                        </div>
+
+                        <div id="err-param-multi-burst" class="form-group-sub" style="display:none;">
+                            <div style="display:flex; gap:10px;">
+                                <div style="flex:1;">
+                                    <label for="sim-multi-burst-count">Number of bursts:</label>
+                                    <input type="number" id="sim-multi-burst-count" class="form-control" value="2" min="2" max="8">
+                                </div>
+                                <div style="flex:1;">
+                                    <label for="sim-multi-burst-len">Bits per burst:</label>
+                                    <input type="number" id="sim-multi-burst-len" class="form-control" value="3" min="1" max="16">
+                                </div>
+                            </div>
+                            <span class="form-hint">Multiple separated burst episodes across the frame to model recurring physical interference.</span>
                         </div>
 
                         <div id="err-param-manual" class="form-group-sub" style="display:none;">
@@ -173,6 +195,17 @@
                                     <div class="bit-stream" id="sim-out-corrupted"></div>
                                 </div>
                                 <div class="error-indices-tag" id="sim-out-indices"></div>
+
+                                <div class="channel-detail-grid mt-2">
+                                    <div class="channel-detail-card">
+                                        <span class="cd-label">Physical Channel Cause:</span>
+                                        <p id="sim-out-cause" class="cd-text">-</p>
+                                    </div>
+                                    <div class="channel-detail-card">
+                                        <span class="cd-label">Introduction Mechanism:</span>
+                                        <p id="sim-out-mechanism" class="cd-text">-</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -236,13 +269,24 @@
                             <option value="clean">Clean transmission (0 errors)</option>
                             <option value="single">Single-bit error (1 random bit)</option>
                             <option value="multiple" selected>Multiple-bit error</option>
-                            <option value="burst">Burst error</option>
+                            <option value="burst">Burst error (random flips in span)</option>
+                            <option value="consecutive_burst">Consecutive burst error (100% solid)</option>
+                            <option value="multiple_burst">Multiple burst errors (separated)</option>
                             <option value="manual">Manual error positions</option>
                         </select>
                     </div>
                     <div class="control-col" id="comp-amount-col">
                         <label id="comp-amount-label">Error Bit Count:</label>
                         <input type="number" id="comp-error-amount" class="form-control" value="2" min="1" max="64">
+                    </div>
+                    <div class="control-col" id="comp-multi-col" style="display:none;">
+                        <label>Burst Episodes:</label>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <input type="number" id="comp-multi-burst-count" class="form-control" value="2" min="2" max="5" style="width:75px;" title="Number of separated burst episodes">
+                            <span style="font-size:0.8rem; color:var(--text-muted);">eps &times;</span>
+                            <input type="number" id="comp-multi-burst-len" class="form-control" value="3" min="2" max="16" style="width:75px;" title="Span of each burst episode">
+                            <span style="font-size:0.8rem; color:var(--text-muted);">bits</span>
+                        </div>
                     </div>
                     <div class="control-col" id="comp-manual-col" style="display:none;">
                         <label>Positions (0-indexed):</label>

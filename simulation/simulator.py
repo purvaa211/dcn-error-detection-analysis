@@ -8,7 +8,7 @@ Coordinates the complete 3-stage communication pipeline:
 
 import time
 import random
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, Tuple
 
 from algorithms.parity import add_vrc, check_vrc, add_parity, check_parity
 from algorithms.lrc import add_lrc, check_lrc
@@ -19,6 +19,8 @@ from simulation.error_generator import (
     single_bit_error,
     multiple_bit_error,
     burst_error,
+    consecutive_burst_error,
+    multiple_burst_error,
     manual_error
 )
 
@@ -119,6 +121,24 @@ def simulate(
         corrupted_frame, flipped_indices = burst_error(
             protected_frame, burst_length=span, mode="textbook", return_indices=True
         )
+    elif error_type in ("consecutive_burst", "consecutive"):
+        span = int(error_amount) if isinstance(error_amount, (int, float)) else 4
+        corrupted_frame, flipped_indices = consecutive_burst_error(
+            protected_frame, burst_length=span, return_indices=True
+        )
+    elif error_type in ("multiple_burst", "multi_burst"):
+        if isinstance(error_amount, dict):
+            num_b = int(error_amount.get("num_bursts", 2))
+            b_len = int(error_amount.get("burst_length", 3))
+        elif isinstance(error_amount, (list, tuple)) and len(error_amount) >= 2:
+            num_b = int(error_amount[0])
+            b_len = int(error_amount[1])
+        else:
+            num_b = 2
+            b_len = int(error_amount) if isinstance(error_amount, (int, float)) else 3
+        corrupted_frame, flipped_indices = multiple_burst_error(
+            protected_frame, num_bursts=num_b, burst_length=b_len, return_indices=True
+        )
     elif error_type == "manual":
         if isinstance(error_amount, list):
             positions = error_amount
@@ -130,7 +150,7 @@ def simulate(
             protected_frame, positions=positions, return_indices=True
         )
     else:
-        raise ValueError(f"Invalid error_type: '{error_type}'. Supported: clean, single, multiple, burst, manual.")
+        raise ValueError(f"Invalid error_type: '{error_type}'. Supported: clean, single, multiple, burst, consecutive_burst, multiple_burst, manual.")
 
     actual_errors_injected = len(flipped_indices)
 
@@ -167,6 +187,13 @@ def simulate(
     overhead_bits = redundancy_bits
     overhead_pct = (overhead_bits / len(data)) * 100 if len(data) > 0 else 0.0
 
+    error_cause, error_introduction = _get_error_cause_and_mechanism(
+        error_type=error_type,
+        errors_injected=actual_errors_injected,
+        flipped_indices=flipped_indices,
+        frame_len=len(protected_frame)
+    )
+
     explanation = _generate_explanation(
         tech_name=tech_name,
         error_type=error_type,
@@ -184,6 +211,8 @@ def simulate(
         "flipped_indices": flipped_indices,
         "errors_injected": actual_errors_injected,
         "error_type": error_type,
+        "error_cause": error_cause,
+        "error_introduction": error_introduction,
         "is_valid": is_valid,
         "error_detected": error_detected,
         "overhead_bits": overhead_bits,
@@ -194,6 +223,59 @@ def simulate(
         "diagnostics": diag_details,
         "explanation": explanation
     }
+
+
+def _get_error_cause_and_mechanism(
+    error_type: str,
+    errors_injected: int,
+    flipped_indices: List[int],
+    frame_len: int
+) -> Tuple[str, str]:
+    """Provide realistic physical layer noise etiology and injection mechanism."""
+    err_norm = error_type.lower().strip()
+
+    if err_norm in ("clean", "none", "0") or errors_injected == 0:
+        cause = "Ideal transmission environment. Complete absence of thermal noise, cross-talk, and electromagnetic interference on the transmission medium."
+        mechanism = "Transparent channel transmission without bit alteration (0 bit flips). Frame integrity is fully preserved."
+        return cause, mechanism
+
+    if err_norm == "single":
+        cause = "Microscopic thermal white noise (Gaussian background disturbance) or a brief localized voltage transient on physical media (copper, optical receiver, or wireless RF)."
+        pos_str = str(flipped_indices[0]) if flipped_indices else "random"
+        mechanism = f"Inverted exactly 1 isolated bit (0 ↔ 1) at frame bit position {pos_str}."
+        return cause, mechanism
+
+    if err_norm == "multiple":
+        cause = "Inductive crosstalk from adjacent cable pairs, high-frequency atmospheric noise, or multi-user interference causing independent random bit flips."
+        mechanism = f"Inverted {errors_injected} independent bit positions scattered across the frame at indices: {flipped_indices}."
+        return cause, mechanism
+
+    if err_norm == "burst":
+        span = (max(flipped_indices) - min(flipped_indices) + 1) if flipped_indices else errors_injected
+        cause = "Transient impulse noise event such as an electrostatic discharge (ESD), lightning strike, relay contact arcing, or sudden power bus switching transient."
+        mechanism = f"Textbook burst error spanning {span} bits from index {min(flipped_indices)} to {max(flipped_indices)}. Endpoints are guaranteed inverted, with intermediate bits flipped probabilistically (total {errors_injected} bits altered)."
+        return cause, mechanism
+
+    if err_norm in ("consecutive_burst", "consecutive"):
+        cause = "Sustained electromagnetic interference (EMI) pulse, temporary physical cable disconnection/vibration, deep signal fade dip in wireless propagation, or transceiver clock sync dropout."
+        start = min(flipped_indices) if flipped_indices else 0
+        end = max(flipped_indices) if flipped_indices else 0
+        mechanism = f"Solid consecutive burst corruption: 100% of contiguous bits inverted continuously across a span of {errors_injected} bit(s) from index {start} to {end}: {flipped_indices}."
+        return cause, mechanism
+
+    if err_norm in ("multiple_burst", "multi_burst"):
+        cause = "Periodic impulse noise, recurring motor commutator arcing, mechanical vibration on connectors, or multipath reflection echoes creating multiple distinct interference clusters."
+        mechanism = f"Multiple separated burst episodes injected across the frame, corrupting {errors_injected} bits across positions: {flipped_indices} separated by uncorrupted bit intervals."
+        return cause, mechanism
+
+    if err_norm == "manual":
+        cause = "Controlled deterministic test harness simulating targeted edge-case vulnerabilities, synchronized bit alterations, or synthetic corruption patterns."
+        mechanism = f"Manual injection of deterministic bit flips directly at user-selected positions: {flipped_indices}."
+        return cause, mechanism
+
+    cause = "Channel disturbance causing binary signal level inversion."
+    mechanism = f"Inverted {errors_injected} bit(s) at positions: {flipped_indices}."
+    return cause, mechanism
 
 
 def _generate_explanation(
@@ -207,7 +289,21 @@ def _generate_explanation(
     if errors_injected == 0:
         return "Clean transmission. Frame integrity verified with 0 bit errors."
 
+    err_norm = error_type.lower().strip()
+
     if "VRC" in tech_name or "Parity" in tech_name:
+        if err_norm in ("consecutive_burst", "consecutive"):
+            if errors_injected % 2 == 1:
+                return (
+                    f"VRC DETECTED consecutive burst: The burst corrupted an odd count of consecutive bits ({errors_injected}), "
+                    f"which altered overall frame parity."
+                )
+            else:
+                return (
+                    f"VRC MISSED consecutive burst: The burst corrupted an even count of consecutive bits ({errors_injected}). "
+                    f"In 1D parity, even bit flips cancel out, leaving parity invariant (d_min = 2)."
+                )
+
         if errors_injected % 2 == 1:
             return (
                 f"VRC DETECTED error: An odd number of bit errors ({errors_injected}) occurred, "
@@ -275,6 +371,17 @@ def compare_all_techniques(
             if random.random() < 0.5:
                 payload_corrupted_indices.append(p)
         payload_corrupted_indices = sorted(payload_corrupted_indices)
+    elif error_type in ("consecutive_burst", "consecutive"):
+        span = max(1, min(int(error_amount) if isinstance(error_amount, (int, float)) else 4, data_len))
+        max_start = data_len - span
+        start = random.randint(0, max_start) if max_start > 0 else 0
+        payload_corrupted_indices = list(range(start, start + span))
+    elif error_type in ("multiple_burst", "multi_burst"):
+        num_b = 2
+        b_len = int(error_amount) if isinstance(error_amount, (int, float)) else 3
+        _, payload_corrupted_indices = multiple_burst_error(
+            "0" * data_len, num_bursts=num_b, burst_length=b_len, return_indices=True
+        )
     elif error_type == "manual":
         if isinstance(error_amount, list):
             positions = error_amount

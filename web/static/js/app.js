@@ -166,10 +166,14 @@ function toggleSimErrorInputs() {
     const errType = document.getElementById("sim-error-type").value;
     const multi = document.getElementById("err-param-multi");
     const burst = document.getElementById("err-param-burst");
+    const consecBurst = document.getElementById("err-param-consec-burst");
+    const multiBurst = document.getElementById("err-param-multi-burst");
     const manual = document.getElementById("err-param-manual");
 
     if (multi) multi.style.display = errType === "multiple" ? "block" : "none";
     if (burst) burst.style.display = errType === "burst" ? "block" : "none";
+    if (consecBurst) consecBurst.style.display = errType === "consecutive_burst" ? "block" : "none";
+    if (multiBurst) multiBurst.style.display = errType === "multiple_burst" ? "block" : "none";
     if (manual) manual.style.display = errType === "manual" ? "block" : "none";
 }
 
@@ -192,6 +196,12 @@ async function handleSimulate(e) {
         errorAmount = parseInt(document.getElementById("sim-multi-count").value, 10) || 2;
     } else if (errorType === "burst") {
         errorAmount = parseInt(document.getElementById("sim-burst-len").value, 10) || 4;
+    } else if (errorType === "consecutive_burst") {
+        errorAmount = parseInt(document.getElementById("sim-consec-burst-len").value, 10) || 4;
+    } else if (errorType === "multiple_burst") {
+        const count = parseInt(document.getElementById("sim-multi-burst-count").value, 10) || 2;
+        const bLen = parseInt(document.getElementById("sim-multi-burst-len").value, 10) || 3;
+        errorAmount = [count, bLen];
     } else if (errorType === "manual") {
         const rawPos = document.getElementById("sim-manual-indices").value;
         positions = rawPos.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
@@ -264,6 +274,12 @@ function renderSimulationResult(sim) {
         indDiv.textContent = "Corrupted Bit Positions: None (Clean Frame)";
     }
 
+    // Physical cause & intro mechanism
+    const causeEl = document.getElementById("sim-out-cause");
+    if (causeEl) causeEl.textContent = sim.error_cause || "None";
+    const mechEl = document.getElementById("sim-out-mechanism");
+    if (mechEl) mechEl.textContent = sim.error_introduction || "None";
+
     // Stage 3
     const mpValid = document.getElementById("sim-mp-valid");
     mpValid.textContent = sim.is_valid ? "Valid (Passed)" : "Corrupted (Failed)";
@@ -322,26 +338,37 @@ function renderCorruptedBitStream(elementId, origStr, corrStr, flippedIndices) {
 function toggleCompErrorInputs() {
     const errType = document.getElementById("comp-error-type").value;
     const amountCol = document.getElementById("comp-amount-col");
+    const multiCol = document.getElementById("comp-multi-col");
     const manualCol = document.getElementById("comp-manual-col");
     const label = document.getElementById("comp-amount-label");
 
-    if (errType === "clean") {
-        amountCol.style.display = "none";
-        manualCol.style.display = "none";
-    } else if (errType === "single") {
-        amountCol.style.display = "none";
-        manualCol.style.display = "none";
+    if (errType === "clean" || errType === "single") {
+        if (amountCol) amountCol.style.display = "none";
+        if (multiCol) multiCol.style.display = "none";
+        if (manualCol) manualCol.style.display = "none";
     } else if (errType === "multiple") {
-        amountCol.style.display = "block";
-        manualCol.style.display = "none";
-        label.textContent = "Error Bit Count:";
+        if (amountCol) amountCol.style.display = "block";
+        if (multiCol) multiCol.style.display = "none";
+        if (manualCol) manualCol.style.display = "none";
+        if (label) label.textContent = "Error Bit Count:";
     } else if (errType === "burst") {
-        amountCol.style.display = "block";
-        manualCol.style.display = "none";
-        label.textContent = "Burst Span (bits):";
+        if (amountCol) amountCol.style.display = "block";
+        if (multiCol) multiCol.style.display = "none";
+        if (manualCol) manualCol.style.display = "none";
+        if (label) label.textContent = "Burst Span (bits):";
+    } else if (errType === "consecutive_burst") {
+        if (amountCol) amountCol.style.display = "block";
+        if (multiCol) multiCol.style.display = "none";
+        if (manualCol) manualCol.style.display = "none";
+        if (label) label.textContent = "Consecutive Span (bits):";
+    } else if (errType === "multiple_burst") {
+        if (amountCol) amountCol.style.display = "none";
+        if (multiCol) multiCol.style.display = "block";
+        if (manualCol) manualCol.style.display = "none";
     } else if (errType === "manual") {
-        amountCol.style.display = "none";
-        manualCol.style.display = "block";
+        if (amountCol) amountCol.style.display = "none";
+        if (multiCol) multiCol.style.display = "none";
+        if (manualCol) manualCol.style.display = "block";
     }
 }
 
@@ -349,8 +376,12 @@ async function handleRunComparison() {
     const errType = document.getElementById("comp-error-type").value;
     let errorAmount = 1;
 
-    if (errType === "multiple" || errType === "burst") {
+    if (errType === "multiple" || errType === "burst" || errType === "consecutive_burst") {
         errorAmount = parseInt(document.getElementById("comp-error-amount").value, 10) || 2;
+    } else if (errType === "multiple_burst") {
+        const c = parseInt(document.getElementById("comp-multi-burst-count")?.value, 10) || 2;
+        const l = parseInt(document.getElementById("comp-multi-burst-len")?.value, 10) || 3;
+        errorAmount = [c, l];
     } else if (errType === "manual") {
         errorAmount = document.getElementById("comp-manual-positions").value.trim() || "0";
     }

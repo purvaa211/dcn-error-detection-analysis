@@ -28,6 +28,8 @@ from simulation.error_generator import (
     single_bit_error,
     multiple_bit_error,
     burst_error,
+    consecutive_burst_error,
+    multiple_burst_error,
     manual_error
 )
 from experiments.experiment_runner import run_all_experiments
@@ -132,7 +134,7 @@ def highlight_corrupted_bits(corrupted_len: int, flipped_indices: List[int]) -> 
 # ======================================================================
 
 def get_error_model_selection(payload_len: int) -> Tuple[str, any, List[int]]:
-    """Prompt user to select from exactly five error models and their parameters.
+    """Prompt user to select from seven physical error models and their parameters.
 
     Returns:
         tuple (error_type, error_amount, positions)
@@ -141,10 +143,12 @@ def get_error_model_selection(payload_len: int) -> Tuple[str, any, List[int]]:
     print("  1. Clean transmission")
     print("  2. Single-bit error")
     print("  3. Multiple-bit error")
-    print("  4. Burst error")
-    print("  5. Manual error injection")
+    print("  4. Burst error (textbook)")
+    print("  5. Consecutive burst corruption (solid contiguous burst)")
+    print("  6. Multiple burst errors (separated burst episodes)")
+    print("  7. Manual error injection")
 
-    choice = input("\nChoice [1-5] (default 1): ").strip()
+    choice = input("\nChoice [1-7] (default 1): ").strip()
 
     # Model 1: Clean transmission
     if choice == "1" or not choice:
@@ -189,7 +193,7 @@ def get_error_model_selection(payload_len: int) -> Tuple[str, any, List[int]]:
         if start_in.isdigit() and 0 <= int(start_in) <= max_start:
             start = int(start_in)
         else:
-            start = random.randint(0, max_start)
+            start = random.randint(0, max_start) if max_start > 0 else 0
             print(f"  -> Random start selected: {start}")
 
         # Textbook burst: first & last bit inverted, intermediate bits 50% random
@@ -201,8 +205,37 @@ def get_error_model_selection(payload_len: int) -> Tuple[str, any, List[int]]:
         flipped = sorted(list(set(flipped)))
         return "burst", burst_len, flipped
 
-    # Model 5: Manual error injection
+    # Model 5: Consecutive burst corruption
     elif choice == "5":
+        len_in = input(f"Consecutive burst length in bits [2 to {payload_len}] (default 4): ").strip()
+        span = int(len_in) if len_in.isdigit() and 1 <= int(len_in) <= payload_len else min(4, payload_len)
+
+        max_start = payload_len - span
+        start_in = input(f"Starting position [0 to {max_start}] (Enter for random): ").strip()
+        if start_in.isdigit() and 0 <= int(start_in) <= max_start:
+            start = int(start_in)
+        else:
+            start = random.randint(0, max_start) if max_start > 0 else 0
+            print(f"  -> Random start selected: {start}")
+
+        flipped = list(range(start, start + span))
+        return "consecutive_burst", span, flipped
+
+    # Model 6: Multiple burst errors
+    elif choice == "6":
+        max_bursts = max(2, payload_len // 4)
+        num_in = input(f"Number of separate bursts [2 to {max_bursts}] (default 2): ").strip()
+        num_bursts = int(num_in) if num_in.isdigit() and 1 <= int(num_in) <= max_bursts else 2
+
+        len_in = input("Burst length per episode in bits (default 3): ").strip()
+        burst_len = int(len_in) if len_in.isdigit() and 1 <= int(len_in) <= payload_len // num_bursts else 3
+
+        _, flipped = multiple_burst_error("0" * payload_len, num_bursts=num_bursts, burst_length=burst_len, return_indices=True)
+        print(f"  -> Multiple burst positions selected: {flipped}")
+        return "multiple_burst", (num_bursts, burst_len), flipped
+
+    # Model 7: Manual error injection
+    elif choice == "7":
         while True:
             pos_in = input(f"Enter bit positions to flip [0 to {payload_len - 1}, comma-separated]: ").strip()
             parsed = [int(p.strip()) for p in pos_in.split(",") if p.strip().isdigit() and 0 <= int(p.strip()) < payload_len]
@@ -270,7 +303,9 @@ def run_simulate_transmission() -> None:
     print(f"  Encoding Latency : {sim['encoding_time'] * 1e6:.2f} us")
 
     print("\n[STAGE 2: CHANNEL (ERROR INJECTION)]")
-    print(f"  Error Model Used : {sim['error_type'].upper()}")
+    print(f"  Error Model Used : {sim['error_type'].upper().replace('_', ' ')}")
+    print(f"  Physical Cause   : {sim.get('error_cause', 'N/A')}")
+    print(f"  Intro Mechanism  : {sim.get('error_introduction', 'N/A')}")
     print(f"  Errors Injected  : {sim['errors_injected']} bit(s)")
     print(f"  Error Positions  : {sim['flipped_indices']}")
     print(f"  Protected Frame  : {sim['protected_frame']}")

@@ -135,7 +135,7 @@ def run_simulation(
 
     # Normalize error type
     error_type = error_type.lower().strip()
-    valid_error_types = ["clean", "single", "multiple", "burst", "manual"]
+    valid_error_types = ["clean", "single", "multiple", "burst", "consecutive_burst", "multiple_burst", "manual"]
     if error_type not in valid_error_types:
         return {
             "success": False,
@@ -161,6 +161,25 @@ def run_simulation(
                 return {"success": False, "error": "Burst length must be at least 1."}
         except (ValueError, TypeError):
             parsed_amount = 4
+    elif error_type in ("consecutive_burst", "consecutive"):
+        try:
+            parsed_amount = int(error_amount)
+            if parsed_amount < 1:
+                return {"success": False, "error": "Consecutive burst length must be at least 1."}
+        except (ValueError, TypeError):
+            parsed_amount = 4
+    elif error_type in ("multiple_burst", "multi_burst"):
+        if isinstance(error_amount, dict):
+            parsed_amount = error_amount
+        elif isinstance(error_amount, (list, tuple)):
+            parsed_amount = error_amount
+        else:
+            try:
+                parsed_amount = int(error_amount)
+                if parsed_amount < 1:
+                    parsed_amount = 3
+            except (ValueError, TypeError):
+                parsed_amount = 3
     elif error_type == "manual":
         if positions is not None:
             parsed_amount = positions
@@ -210,7 +229,7 @@ def run_comparison(
         return {"success": False, "error": err_msg}
 
     error_type = error_type.lower().strip()
-    valid_error_types = ["clean", "single", "multiple", "burst", "manual"]
+    valid_error_types = ["clean", "single", "multiple", "burst", "consecutive_burst", "multiple_burst", "manual"]
     if error_type not in valid_error_types:
         return {
             "success": False,
@@ -232,6 +251,21 @@ def run_comparison(
             parsed_amount = int(error_amount)
         except (ValueError, TypeError):
             parsed_amount = 4
+    elif error_type in ("consecutive_burst", "consecutive"):
+        try:
+            parsed_amount = int(error_amount)
+        except (ValueError, TypeError):
+            parsed_amount = 4
+    elif error_type in ("multiple_burst", "multi_burst"):
+        if isinstance(error_amount, dict):
+            parsed_amount = error_amount
+        elif isinstance(error_amount, (list, tuple)):
+            parsed_amount = error_amount
+        else:
+            try:
+                parsed_amount = int(error_amount)
+            except (ValueError, TypeError):
+                parsed_amount = 3
     elif error_type == "manual":
         if isinstance(error_amount, list):
             parsed_amount = error_amount
