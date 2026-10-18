@@ -560,32 +560,25 @@ function initExperimentsTab() {
     checkExperimentStatus();
 }
 
-async function checkExperimentStatus() {
-    try {
-        const res = await fetch("/api/experiments/status");
-        const data = await res.json();
-        if (data.success) {
-            updateBaselineUI(data.baseline);
-            updateStagingBanner(data.has_staged_run, data.staged_run);
-        }
-    } catch (err) {
-        console.error("Status check error:", err);
-    }
+function checkExperimentStatus() {
+    // Keep baseline ready
 }
 
 function updateBaselineUI(baseline) {
     const badge = document.getElementById("baseline-status-badge");
     const lastMod = document.getElementById("baseline-last-mod");
 
-    if (baseline.baseline_ready) {
-        badge.className = "badge badge-success";
-        badge.textContent = "Baseline Available";
-    } else {
-        badge.className = "badge badge-warning";
-        badge.textContent = "Benchmark Not Run Yet";
+    if (badge && baseline) {
+        if (baseline.baseline_ready) {
+            badge.className = "badge badge-success";
+            badge.textContent = "Baseline Available";
+        } else {
+            badge.className = "badge badge-warning";
+            badge.textContent = "Benchmark Not Run Yet";
+        }
     }
 
-    if (lastMod) {
+    if (lastMod && baseline) {
         lastMod.textContent = baseline.last_modified || "Never";
     }
 }
@@ -593,11 +586,11 @@ function updateBaselineUI(baseline) {
 function updateStagingBanner(hasStaged, stagedRun) {
     const banner = document.getElementById("staging-banner");
     const msg = document.getElementById("staging-msg");
+    if (!banner) return;
 
     if (hasStaged && stagedRun) {
         banner.style.display = "flex";
-        msg.textContent = `New experiment results generated (${stagedRun.total_trials} trials in ${stagedRun.elapsed_seconds}s).`;
-        // Refresh charts to show newly staged plots
+        if (msg) msg.textContent = `New experiment results generated (${stagedRun.total_trials} trials in ${stagedRun.elapsed_seconds}s).`;
         refreshCharts("staged");
     } else {
         banner.style.display = "none";
@@ -605,14 +598,22 @@ function updateStagingBanner(hasStaged, stagedRun) {
 }
 
 async function handleRunExperiments(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
+
+    const confirmed = confirm(
+        "Are you sure you want to run the empirical benchmarks with these settings?\n\nThis will execute trials across all 4 techniques and update the Analytical Performance Visualizations and Aggregated Performance Metrics."
+    );
+    if (!confirmed) {
+        return;
+    }
+
     const btn = document.getElementById("btn-run-exp");
     const progress = document.getElementById("exp-progress");
     const progressText = document.getElementById("exp-progress-text");
 
-    btn.disabled = true;
-    progress.style.display = "block";
-    progressText.textContent = "Executing benchmark experiments across all 4 techniques... Please wait.";
+    if (btn) btn.disabled = true;
+    if (progress) progress.style.display = "block";
+    if (progressText) progressText.textContent = "Executing benchmark suite across all 4 techniques... Please wait.";
 
     const sizes = document.getElementById("exp-sizes").value;
     const mags = document.getElementById("exp-mags").value;
@@ -633,19 +634,34 @@ async function handleRunExperiments(e) {
 
         const data = await res.json();
         if (data.success) {
-            progress.style.display = "none";
-            updateStagingBanner(true, data);
-            loadMetricsTable("staged");
+            if (progressText) progressText.textContent = "Applying newly generated analytical charts and metrics...";
+            
+            // Automatically commit to baseline
+            await fetch("/api/experiments/apply", { method: "POST" });
+
+            if (progress) progress.style.display = "none";
+
+            // Update Analytical Performance Visualizations (all 4 charts)
+            refreshCharts("baseline");
+
+            // Update Aggregated Performance Metrics table
+            await loadMetricsTable("baseline");
+
+            // Smoothly scroll down to the updated visualizations
+            const chartsCard = document.getElementById("charts-card");
+            if (chartsCard) {
+                chartsCard.scrollIntoView({ behavior: "smooth" });
+            }
         } else {
             alert(data.error || "Benchmark run failed.");
-            progress.style.display = "none";
+            if (progress) progress.style.display = "none";
         }
     } catch (err) {
         console.error("Experiment run error:", err);
         alert("Failed to execute benchmark run.");
-        progress.style.display = "none";
+        if (progress) progress.style.display = "none";
     } finally {
-        btn.disabled = false;
+        if (btn) btn.disabled = false;
     }
 }
 

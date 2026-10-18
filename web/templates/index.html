@@ -8,16 +8,8 @@
 </head>
 <body>
     <header class="site-header">
-        <div class="header-content container">
-            <div class="header-titles">
-                <span class="badge badge-accent">DCN Engineering Project</span>
-                <h1>Experimental Analysis of Error Detection Techniques</h1>
-                <p class="subtitle">Comparative Evaluation of VRC / Parity, LRC, Internet Checksum, and CRC</p>
-            </div>
-            <div class="header-meta">
-                <span class="status-indicator live"></span>
-                <span class="meta-text">Backend: Connected (Native Python Engine)</span>
-            </div>
+        <div class="container text-center">
+            <h1 class="main-title">Experimental Analysis of Error Detection Techniques</h1>
         </div>
     </header>
 
@@ -368,24 +360,12 @@
         <!-- TAB 4: EXPERIMENTS & ANALYTICAL GRAPHS                        -->
         <!-- ============================================================== -->
         <section id="tab-experiments" class="tab-pane">
-            <!-- Staging Notification Banner -->
-            <div id="staging-banner" class="alert alert-warning" style="display:none;">
-                <div class="alert-content">
-                    <strong id="staging-msg">New experiment results have been generated.</strong>
-                    <span>Do you want to apply these changes and replace the project baseline results?</span>
-                </div>
-                <div class="alert-actions">
-                    <button class="btn btn-sm btn-success" onclick="applyStagedExperiments()">Apply and Keep</button>
-                    <button class="btn btn-sm btn-danger" onclick="discardStagedExperiments()">Discard and Restore</button>
-                </div>
-            </div>
-
-            <div class="panel-grid">
+            <div class="benchmark-center-wrapper">
                 <!-- Benchmark Configuration Card -->
-                <div class="card">
-                    <div class="card-header">
-                        <h2>Benchmark Settings</h2>
-                        <p class="card-desc">Configure payload sizes, error categories, and sample trials for batch empirical evaluation.</p>
+                <div class="card benchmark-card">
+                    <div class="card-header text-center" style="display:block;">
+                        <h2 style="text-align:center;">Benchmark Settings</h2>
+                        <p class="card-desc" style="text-align:center;">Configure payload sizes, error categories, and sample trials for batch empirical evaluation.</p>
                     </div>
                     <form id="exp-form" onsubmit="handleRunExperiments(event)">
                         <div class="form-group">
@@ -413,7 +393,7 @@
                         </div>
 
                         <button type="submit" id="btn-run-exp" class="btn btn-primary btn-block">
-                            Run Benchmark Suite & Generate Visualizations
+                            Update Performance Visualizations & Metrics
                         </button>
                     </form>
 
@@ -422,35 +402,10 @@
                         <span id="exp-progress-text">Running benchmark experiments... Please wait.</span>
                     </div>
                 </div>
-
-                <!-- Baseline Status Card -->
-                <div class="card">
-                    <div class="card-header">
-                        <h2>Baseline Repository Status</h2>
-                        <span id="baseline-status-badge" class="badge badge-success">Baseline Available</span>
-                    </div>
-                    <div class="baseline-info-body">
-                        <ul class="status-list">
-                            <li><span class="status-dot green"></span> Raw Trials Dataset: <code class="code-pill">experiment_results.csv</code></li>
-                            <li><span class="status-dot green"></span> Aggregated Metrics: <code class="code-pill">metrics_results.csv</code></li>
-                            <li><span class="status-dot green"></span> Analytical Charts (4 Required): <code class="code-pill">visualization/*.png</code></li>
-                        </ul>
-                        <div class="baseline-meta-box">
-                            <div class="bmb-item">
-                                <span class="bmb-label">Last Modified:</span>
-                                <span id="baseline-last-mod" class="bmb-val">-</span>
-                            </div>
-                            <div class="bmb-item">
-                                <span class="bmb-label">Clean vs Corrupted:</span>
-                                <span class="bmb-val">Properly Separated</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- The 4 Analytical Visualizations -->
-            <div class="card mt-4">
+            <div class="card mt-4" id="charts-card">
                 <div class="card-header">
                     <h2>Analytical Performance Visualizations</h2>
                     <p class="card-desc">The four analytical graphs generated directly by the backend visualization suite at 300 DPI.</p>
