@@ -598,7 +598,7 @@ function updateStagingBanner(hasStaged, stagedRun) {
 }
 
 async function handleRunExperiments(e) {
-    if (e) e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
 
     const confirmed = confirm(
         "Are you sure you want to run the empirical benchmarks with these settings?\n\nThis will execute trials across all 4 techniques and update the Analytical Performance Visualizations and Aggregated Performance Metrics."
@@ -615,10 +615,10 @@ async function handleRunExperiments(e) {
     if (progress) progress.style.display = "block";
     if (progressText) progressText.textContent = "Executing benchmark suite across all 4 techniques... Please wait.";
 
-    const sizes = document.getElementById("exp-sizes").value;
-    const mags = document.getElementById("exp-mags").value;
-    const bursts = document.getElementById("exp-bursts").value;
-    const trials = parseInt(document.getElementById("exp-trials").value, 10) || 50;
+    const sizes = document.getElementById("exp-sizes")?.value || "32, 64, 128, 256, 512";
+    const mags = document.getElementById("exp-mags")?.value || "1, 2, 3, 4, 5, 8";
+    const bursts = document.getElementById("exp-bursts")?.value || "2, 4, 8, 16";
+    const trials = parseInt(document.getElementById("exp-trials")?.value, 10) || 50;
 
     try {
         const res = await fetch("/api/experiments/run", {
@@ -632,12 +632,20 @@ async function handleRunExperiments(e) {
             })
         });
 
+        if (!res.ok) {
+            let errorMsg = `Server error (${res.status})`;
+            try {
+                const errData = await res.json();
+                if (errData && errData.error) errorMsg = errData.error;
+            } catch (_) {}
+            alert("Benchmark run failed: " + errorMsg);
+            if (progress) progress.style.display = "none";
+            return;
+        }
+
         const data = await res.json();
         if (data.success) {
-            if (progressText) progressText.textContent = "Applying newly generated analytical charts and metrics...";
-            
-            // Automatically commit to baseline
-            await fetch("/api/experiments/apply", { method: "POST" });
+            if (progressText) progressText.textContent = "Reloading analytical visualizations and metrics...";
 
             if (progress) progress.style.display = "none";
 
@@ -658,7 +666,7 @@ async function handleRunExperiments(e) {
         }
     } catch (err) {
         console.error("Experiment run error:", err);
-        alert("Failed to execute benchmark run.");
+        alert("Failed to execute benchmark run: " + (err.message || err));
         if (progress) progress.style.display = "none";
     } finally {
         if (btn) btn.disabled = false;

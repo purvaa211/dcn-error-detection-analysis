@@ -147,6 +147,22 @@ class ExperimentService:
             if not (valid_exp and valid_metrics and valid_charts):
                 raise RuntimeError("One or more benchmark output files failed to generate.")
 
+            # Automatically copy outputs to baseline so they are immediately available
+            target_exp_csv = os.path.join(self.root_dir, "experiment_results.csv")
+            target_metrics_csv = os.path.join(self.root_dir, "metrics_results.csv")
+            target_viz_dir = os.path.join(self.root_dir, "visualization")
+            os.makedirs(target_viz_dir, exist_ok=True)
+
+            try:
+                shutil.copy2(staging_exp_csv, target_exp_csv)
+                shutil.copy2(staging_metrics_csv, target_metrics_csv)
+                for c in EXPECTED_CHARTS:
+                    src_chart = os.path.join(staging_viz_dir, c)
+                    if os.path.exists(src_chart):
+                        shutil.copy2(src_chart, os.path.join(target_viz_dir, c))
+            except Exception as copy_err:
+                print(f"[Warning] Failed to copy staged files to baseline: {copy_err}")
+
             run_result = {
                 "success": True,
                 "run_id": run_id,

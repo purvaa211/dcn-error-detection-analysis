@@ -367,7 +367,7 @@
                         <h2 style="text-align:center;">Benchmark Settings</h2>
                         <p class="card-desc" style="text-align:center;">Configure payload sizes, error categories, and sample trials for batch empirical evaluation.</p>
                     </div>
-                    <form id="exp-form" onsubmit="handleRunExperiments(event)">
+                    <form id="exp-form" onsubmit="event.preventDefault(); handleRunExperiments(event); return false;">
                         <div class="form-group">
                             <label for="exp-sizes">Data Payload Sizes (bits, comma-separated):</label>
                             <input type="text" id="exp-sizes" class="form-control" value="32, 64, 128, 256, 512">
@@ -392,7 +392,7 @@
                             <span class="form-hint">Recommended: 50 for full dataset, or 10-20 for fast interactive tests.</span>
                         </div>
 
-                        <button type="submit" id="btn-run-exp" class="btn btn-primary btn-block">
+                        <button type="button" id="btn-run-exp" class="btn btn-primary btn-block" onclick="handleRunExperiments(event)">
                             Update Performance Visualizations & Metrics
                         </button>
                     </form>

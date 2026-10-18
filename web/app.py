@@ -177,45 +177,51 @@ def api_experiments_status():
 @app.route("/api/experiments/run", methods=["POST"])
 def api_experiments_run():
     """Execute benchmark experiments in staging environment."""
-    payload = request.get_json() or {}
+    try:
+        payload = request.get_json(silent=True) or {}
 
-    # Parse configurable parameters
-    sizes_raw = payload.get("data_sizes")
-    if sizes_raw:
-        if isinstance(sizes_raw, str):
-            sizes = [int(s.strip()) for s in sizes_raw.split(",") if s.strip().isdigit()]
+        # Parse configurable parameters
+        sizes_raw = payload.get("data_sizes")
+        if sizes_raw:
+            if isinstance(sizes_raw, str):
+                sizes = [int(s.strip()) for s in sizes_raw.split(",") if s.strip().isdigit()]
+            else:
+                sizes = [int(s) for s in sizes_raw]
         else:
-            sizes = [int(s) for s in sizes_raw]
-    else:
-        sizes = [32, 64, 128, 256, 512]
+            sizes = [32, 64, 128, 256, 512]
 
-    mags_raw = payload.get("multi_error_amounts")
-    if mags_raw:
-        if isinstance(mags_raw, str):
-            mags = [int(m.strip()) for m in mags_raw.split(",") if m.strip().isdigit()]
+        mags_raw = payload.get("multi_error_amounts")
+        if mags_raw:
+            if isinstance(mags_raw, str):
+                mags = [int(m.strip()) for m in mags_raw.split(",") if m.strip().isdigit()]
+            else:
+                mags = [int(m) for m in mags_raw]
         else:
-            mags = [int(m) for m in mags_raw]
-    else:
-        mags = [1, 2, 3, 4, 5, 8]
+            mags = [1, 2, 3, 4, 5, 8]
 
-    bursts_raw = payload.get("burst_lengths")
-    if bursts_raw:
-        if isinstance(bursts_raw, str):
-            bursts = [int(b.strip()) for b in bursts_raw.split(",") if b.strip().isdigit()]
+        bursts_raw = payload.get("burst_lengths")
+        if bursts_raw:
+            if isinstance(bursts_raw, str):
+                bursts = [int(b.strip()) for b in bursts_raw.split(",") if b.strip().isdigit()]
+            else:
+                bursts = [int(b) for b in bursts_raw]
         else:
-            bursts = [int(b) for b in bursts_raw]
-    else:
-        bursts = [2, 4, 8, 16]
+            bursts = [2, 4, 8, 16]
 
-    trials = int(payload.get("trials", 50))
+        try:
+            trials = int(payload.get("trials", 50))
+        except (ValueError, TypeError):
+            trials = 50
 
-    run_res = experiment_service.run_benchmark(
-        data_sizes=sizes,
-        multi_error_amounts=mags,
-        burst_lengths=bursts,
-        trials=trials
-    )
-    return jsonify(run_res)
+        run_res = experiment_service.run_benchmark(
+            data_sizes=sizes,
+            multi_error_amounts=mags,
+            burst_lengths=bursts,
+            trials=trials
+        )
+        return jsonify(run_res)
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Internal experiment runner error: {str(e)}"}), 500
 
 
 @app.route("/api/experiments/apply", methods=["POST"])
