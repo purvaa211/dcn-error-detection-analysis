@@ -17,7 +17,7 @@ This project implements a complete, structured **Data Link Layer Error Control A
 2. **Four Detection Techniques:**
    - **VRC / Parity (Vertical Redundancy Check):** Appends 1 parity bit per data unit to achieve even parity ($d_{min} = 2$).
    - **LRC (Longitudinal Redundancy Check):** Organizes data into blocks and computes column-by-column parity bits.
-   - **Checksum (Internet Checksum RFC 1071):** Computes 8-bit 1's complement sum with end-around carry (used in TCP/IP).
+   - **Checksum (1's Complement):** Computes 1's complement sum with end-around carry (defaults to 8-bit words; 16-bit word mode follows RFC 1071 as used in TCP/IP).
    - **CRC (Cyclic Redundancy Check):** Modulo-2 binary polynomial division ($GF(2)$ XOR arithmetic) using the standard CRC-8 generator polynomial ($x^8 + x^2 + x + 1$).
 3. **Five Error Generation Models:**
    - Clean transmission (zero error introduced)
@@ -41,7 +41,7 @@ error_detection_project/
 ├── algorithms/                    # Error Detection Algorithms
 │   ├── parity.py                  # VRC / Parity (Vertical Redundancy Check)
 │   ├── lrc.py                     # LRC (Longitudinal Redundancy Check)
-│   ├── checksum.py                # Internet Checksum (RFC 1071 1's complement)
+│   ├── checksum.py                # 1's Complement Checksum (8-bit default, 16-bit RFC 1071)
 │   ├── crc.py                     # Cyclic Redundancy Check (CRC-8, Modulo-2 division)
 │   └── two_dim_parity.py          # 2D Matrix Parity helper
 │
@@ -72,7 +72,7 @@ error_detection_project/
 
 1. Open the project folder in **Visual Studio Code**:
    ```
-   File -> Open Folder -> c:\Users\Purva\OneDrive\Desktop\error_detection_project
+   File -> Open Folder -> (select the project root directory)
    ```
 2. Open the built-in terminal (`Ctrl + ~` or `Terminal -> New Terminal`).
 3. Run the interactive console application:

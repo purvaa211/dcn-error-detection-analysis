@@ -13,6 +13,12 @@ import csv
 import time
 from typing import List, Dict, Any, Optional
 
+import os
+import sys
+
+# Ensure repository root is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from simulation.simulator import simulate
 
 random.seed(42)
@@ -66,7 +72,7 @@ def run_all_experiments(
     multi_error_amounts: Optional[List[int]] = None,
     burst_lengths: Optional[List[int]] = None,
     include_clean: bool = True,
-    trials: int = 50,
+    trials: int = 1000,
     output_file: str = "experiment_results.csv",
     verbose: bool = True
 ) -> List[Dict[str, Any]]:
@@ -185,7 +191,7 @@ def run_all_experiments(
 
 
 def main():
-    run_all_experiments(trials=50)
+    run_all_experiments(trials=1000)
 
 
 if __name__ == "__main__":

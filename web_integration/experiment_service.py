@@ -76,7 +76,7 @@ class ExperimentService:
         data_sizes: Optional[List[int]] = None,
         multi_error_amounts: Optional[List[int]] = None,
         burst_lengths: Optional[List[int]] = None,
-        trials: int = 50
+        trials: int = 1000
     ) -> Dict[str, Any]:
         """Execute benchmark experiments safely inside an isolated staging directory."""
         if not self.lock.acquire(blocking=False):

@@ -265,7 +265,7 @@ def run_simulate_transmission() -> None:
     print("\nSelect Detection Technique:")
     print("  [1] VRC / Parity (Vertical Redundancy Check)")
     print("  [2] LRC          (Longitudinal Redundancy Check)")
-    print("  [3] Checksum     (Internet Checksum - 8-bit)")
+    print("  [3] Checksum     (1's Complement - 8-bit)")
     print("  [4] CRC          (Cyclic Redundancy Check - CRC-8)")
 
     tech_choice = input("\nChoice [1-4] (default 4): ").strip()
@@ -422,7 +422,7 @@ def run_view_algorithm_working() -> None:
     print("\nSelect Algorithm to View:")
     print("  [1] VRC / Parity Working")
     print("  [2] LRC          Working")
-    print("  [3] Checksum     Working")
+    print("  [3] Checksum     Working (1's Complement)")
     print("  [4] CRC          Working (Modulo-2 Division)")
     print("  [5] View All Four Algorithms")
 
@@ -494,8 +494,8 @@ def run_experiments_and_graphs() -> None:
         bursts = [2, 4, 6, 8, 12, 16]
 
     # Trial count
-    trials_in = input("  Trials per configuration [default: 50]: ").strip()
-    trials = int(trials_in) if trials_in.isdigit() and int(trials_in) > 0 else 50
+    trials_in = input("  Trials per configuration [default: 1000]: ").strip()
+    trials = int(trials_in) if trials_in.isdigit() and int(trials_in) > 0 else 1000
 
     # 1. Setup isolated temporary staging directory
     staging_dir = tempfile.mkdtemp(prefix="dcn_exp_staging_")

@@ -1,4 +1,12 @@
-"""Internet Checksum Algorithm (RFC 1071 style).
+"""1's Complement Checksum Algorithm.
+
+Implements 1's complement addition with end-around carry.
+Used across the TCP/IP stack (IPv4, TCP, UDP).
+
+Note on RFC 1071:
+- RFC 1071 specifies a 16-bit word size as used in IPv4, TCP, and UDP.
+- In this educational simulator, word size defaults to 8-bit words ("Checksum 8-bit"),
+  while 16-bit words can be selected for true "Internet Checksum (RFC 1071)" operation.
 
 Implements 1's complement addition with end-around carry.
 Used across the TCP/IP stack (IPv4, TCP, UDP).
@@ -189,7 +197,7 @@ def format_checksum_working(data: str, word_size: int = 8) -> str:
 
     lines = [
         "=" * 60,
-        f" INTERNET CHECKSUM ({word_size}-BIT) STEP-BY-STEP CALCULATION",
+        f" {'INTERNET CHECKSUM (16-BIT, RFC 1071)' if word_size == 16 else f'1S COMPLEMENT CHECKSUM ({word_size}-BIT)'} STEP-BY-STEP CALCULATION",
         "=" * 60,
         f" Original Data: {data} ({len(data)} bits)",
         f" Word Size    : {word_size} bits | Divided into {len(blocks_bin)} block(s)",

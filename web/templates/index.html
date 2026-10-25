@@ -63,7 +63,7 @@
                             <select id="sim-technique" class="form-control" onchange="toggleSimTechniqueOptions()">
                                 <option value="VRC / Parity">VRC / Parity (Even Parity - 1 bit)</option>
                                 <option value="LRC">LRC (Longitudinal Redundancy Check - 8-bit)</option>
-                                <option value="Checksum">Internet Checksum (1's Complement)</option>
+                                <option value="Checksum">Checksum (1's Complement - 8-bit)</option>
                                 <option value="CRC" selected>CRC (Cyclic Redundancy Check)</option>
                             </select>
                         </div>
@@ -83,8 +83,8 @@
                         <div id="sim-checksum-options" class="form-group-sub" style="display:none;">
                             <label for="sim-chk-size">Word Size (bits):</label>
                             <select id="sim-chk-size" class="form-control">
-                                <option value="8" selected>8-bit words</option>
-                                <option value="16">16-bit words</option>
+                                <option value="8" selected>8-bit words (Checksum 8-bit)</option>
+                                <option value="16">16-bit words (Internet Checksum RFC 1071)</option>
                             </select>
                         </div>
 
@@ -247,7 +247,7 @@
             <div class="card">
                 <div class="card-header">
                     <h2>Comparative Performance Analysis</h2>
-                    <p class="card-desc">Evaluate VRC / Parity, LRC, Internet Checksum, and CRC on identical data and equivalent physical error conditions.</p>
+                    <p class="card-desc">Evaluate VRC / Parity, LRC, Checksum, and CRC on identical data and equivalent physical error conditions.</p>
                 </div>
 
                 <div class="compare-controls-bar">
@@ -388,8 +388,8 @@
 
                         <div class="form-group">
                             <label for="exp-trials">Trials per Configuration:</label>
-                            <input type="number" id="exp-trials" class="form-control" value="50" min="5" max="500">
-                            <span class="form-hint">Recommended: 50 for full dataset, or 10-20 for fast interactive tests.</span>
+                            <input type="number" id="exp-trials" class="form-control" value="1000" min="5" max="5000">
+                            <span class="form-hint">Recommended: 1000 for full statistical evaluation (avoids false 100% CRC), or 50-100 for fast interactive tests.</span>
                         </div>
 
                         <button type="button" id="btn-run-exp" class="btn btn-primary btn-block" onclick="handleRunExperiments(event)">
