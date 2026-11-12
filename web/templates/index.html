@@ -3,492 +3,770 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DCN Error Detection & Analysis System</title>
+    <title>Network Error Generation and Detection Analysis System</title>
+    <!-- Modern typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <header class="site-header">
-        <div class="container text-center">
-            <h1 class="main-title">Experimental Analysis of Error Detection Techniques</h1>
+    <div class="app-wrapper">
+        <!-- ============================================================== -->
+        <!-- LEFT SIDEBAR NAVIGATION                                        -->
+        <!-- ============================================================== -->
+        <aside class="app-sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-icon">DCN</div>
+                <div class="brand-info">
+                    <span class="brand-title">Error Analysis System</span>
+                    <span class="brand-subtitle">Data Link Layer Lab</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="nav-link active" data-page="overview" onclick="navigateToPage('overview')">
+                    <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                    <span>Overview</span>
+                </button>
+                <button class="nav-link" data-page="simulator" onclick="navigateToPage('simulator')">
+                    <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <span>Transmission Simulator</span>
+                </button>
+                <button class="nav-link" data-page="detection" onclick="navigateToPage('detection')">
+                    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    <span>Error Detection</span>
+                </button>
+                <button class="nav-link" data-page="comparison" onclick="navigateToPage('comparison')">
+                    <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                    <span>Algorithm Comparison</span>
+                </button>
+                <button class="nav-link" data-page="experiments" onclick="navigateToPage('experiments')">
+                    <svg viewBox="0 0 24 24"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+                    <span>Experimental Analysis</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="session-pill-box">
+                    <span class="sp-label">Active Payload:</span>
+                    <span class="sp-val" id="sidebar-payload-display">{{ default_data }}</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ============================================================== -->
+        <!-- MAIN CONTENT CONTAINER                                         -->
+        <!-- ============================================================== -->
+        <div class="app-main">
+            <!-- Top Header Bar -->
+            <header class="top-header">
+                <div class="header-left">
+                    <h1 id="top-header-title">Overview</h1>
+                    <p id="top-header-desc">Simulating unreliable communication channels and evaluating error detection techniques.</p>
+                </div>
+                <div class="header-right">
+                    <span class="date-pill" id="live-date-pill">Loading Date...</span>
+                    <button class="btn btn-sm btn-secondary" onclick="openDataModal()">Change Payload</button>
+                </div>
+            </header>
+
+            <!-- Page Views Container -->
+            <main class="page-content">
+
+                <!-- ============================================================== -->
+                <!-- PAGE 1: OVERVIEW                                               -->
+                <!-- ============================================================== -->
+                <section id="view-overview" class="page-view active">
+                    <!-- Hero Introduction -->
+                    <div class="hero-banner">
+                        <h2 class="hero-title">Network Error Generation & Detection Analysis</h2>
+                        <p class="hero-subtitle">
+                            An engineering simulation system designed to model physical communication channels,
+                            introduce stochastic and deterministic transmission errors, and empirically analyze
+                            the mathematical limits of Data Link Layer error control mechanisms.
+                        </p>
+                        <div class="hero-actions">
+                            <button class="btn btn-primary" onclick="navigateToPage('simulator')">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                Start Transmission Simulation
+                            </button>
+                            <button class="btn btn-secondary" onclick="navigateToPage('comparison')">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                                Explore Algorithm Comparison
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Application Summary Cards -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Total Simulations</div>
+                            <div class="stat-value" id="stat-total-sims">-</div>
+                            <div class="stat-sub">Recorded across interactive trials</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Total Injected Errors</div>
+                            <div class="stat-value" id="stat-total-errors">-</div>
+                            <div class="stat-sub">Simulated physical channel flips</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Average Detection Rate</div>
+                            <div class="stat-value" id="stat-avg-detection">-</div>
+                            <div class="stat-sub">Across all corrupted runs</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Algorithms Evaluated</div>
+                            <div class="stat-value" id="stat-algo-count">4</div>
+                            <div class="stat-sub">Parity, LRC, Checksum, CRC</div>
+                        </div>
+                    </div>
+
+                    <!-- Transmission Workflow Explanation -->
+                    <div class="card workflow-section">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">Transmission Architecture Pipeline</h3>
+                                <p class="card-desc">End-to-end data link communication flow over an unreliable physical medium.</p>
+                            </div>
+                        </div>
+                        <div class="workflow-steps">
+                            <div class="workflow-node">
+                                <div class="node-badge">1</div>
+                                <span class="node-title">SENDER</span>
+                                <span class="node-desc">Payload input & ASCII conversion</span>
+                            </div>
+                            <div class="workflow-arrow">&#8594;</div>
+                            <div class="workflow-node">
+                                <div class="node-badge">2</div>
+                                <span class="node-title">ENCODER</span>
+                                <span class="node-desc">Redundancy bit calculation</span>
+                            </div>
+                            <div class="workflow-arrow">&#8594;</div>
+                            <div class="workflow-node">
+                                <div class="node-badge">3</div>
+                                <span class="node-title">TRANSMISSION CHANNEL</span>
+                                <span class="node-desc">Physical noise & bit corruptions</span>
+                            </div>
+                            <div class="workflow-arrow">&#8594;</div>
+                            <div class="workflow-node">
+                                <div class="node-badge">4</div>
+                                <span class="node-title">RECEIVER</span>
+                                <span class="node-desc">Frame reception & parsing</span>
+                            </div>
+                            <div class="workflow-arrow">&#8594;</div>
+                            <div class="workflow-node">
+                                <div class="node-badge">5</div>
+                                <span class="node-title">ERROR DETECTION</span>
+                                <span class="node-desc">Integrity verification & diagnostics</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Compact Recent Experiments Table -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">Recent Transmission Experiments</h3>
+                                <p class="card-desc">Persistent historical log from actual simulator executions.</p>
+                            </div>
+                            <button class="btn btn-sm btn-outline" onclick="loadOverviewStats()">Refresh History</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Experiment ID</th>
+                                        <th>Algorithm</th>
+                                        <th>Error Model</th>
+                                        <th>Injected Errors</th>
+                                        <th>Detection Result</th>
+                                        <th>Timestamp</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="overview-recent-table">
+                                    <tr><td colspan="6" class="text-center">Loading recent experiments...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+
+                <!-- ============================================================== -->
+                <!-- PAGE 2: TRANSMISSION SIMULATOR                                 -->
+                <!-- ============================================================== -->
+                <section id="view-simulator" class="page-view">
+                    <div class="simulator-grid">
+                        <!-- Left Controls Column -->
+                        <div class="simulator-controls">
+                            <form id="sim-form" onsubmit="handleSimulatorSubmit(event)">
+
+                                <!-- STEP 1: ENTER DATA -->
+                                <div class="step-card">
+                                    <div class="step-header">
+                                        <div class="step-number">1</div>
+                                        <div class="step-title">Enter Payload Data</div>
+                                    </div>
+                                    <div class="input-mode-tabs">
+                                        <button type="button" class="input-tab-btn active" id="tab-btn-binary" onclick="setSimulatorInputMode('binary')">Binary Input</button>
+                                        <button type="button" class="input-tab-btn" id="tab-btn-text" onclick="setSimulatorInputMode('text')">Text Input (ASCII)</button>
+                                    </div>
+
+                                    <!-- Binary Input Form -->
+                                    <div id="sim-mode-binary-wrap">
+                                        <label for="sim-data-input">Binary String ('0' and '1'):</label>
+                                        <input type="text" id="sim-data-input" class="form-control code-input" value="{{ default_data }}" required spellcheck="false" oninput="handleBinaryInputChange()">
+                                        <div class="quick-gen-bar">
+                                            <button type="button" class="btn btn-sm btn-secondary" onclick="generateSimulatorRandom(8)">8 bits</button>
+                                            <button type="button" class="btn btn-sm btn-secondary" onclick="generateSimulatorRandom(16)">16 bits</button>
+                                            <button type="button" class="btn btn-sm btn-secondary" onclick="generateSimulatorRandom(32)">32 bits</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Text Input Form -->
+                                    <div id="sim-mode-text-wrap" style="display:none;">
+                                        <label for="sim-text-input">Plain ASCII Text:</label>
+                                        <input type="text" id="sim-text-input" class="form-control" placeholder="e.g. NET, DCN, Packets" oninput="handleTextToBinaryLive()">
+                                        <span class="form-hint" id="sim-text-conversion-preview">Enter text to automatically convert to 8-bit ASCII binary.</span>
+                                    </div>
+                                </div>
+
+                                <!-- STEP 2: SELECT DETECTION TECHNIQUE -->
+                                <div class="step-card">
+                                    <div class="step-header">
+                                        <div class="step-number">2</div>
+                                        <div class="step-title">Select Detection Technique</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <select id="sim-tech-select" class="form-control" onchange="handleTechSelectionChange()">
+                                            <option value="VRC / Parity">Parity Check / VRC (1-bit Even Parity)</option>
+                                            <option value="LRC">LRC (Longitudinal Redundancy Check - 8-bit)</option>
+                                            <option value="Checksum">8-bit Internet Checksum (1's Complement)</option>
+                                            <option value="CRC" selected>CRC (Cyclic Redundancy Check)</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- CRC Options -->
+                                    <div id="sim-crc-options" class="form-group-sub">
+                                        <label for="sim-crc-poly">Generator Polynomial:</label>
+                                        <select id="sim-crc-poly" class="form-control">
+                                            <option value="100000111">CRC-8 (x^8 + x^2 + x + 1)</option>
+                                            <option value="11000000000000101">CRC-16-IBM (x^16 + x^15 + x^2 + 1)</option>
+                                            <option value="10001000000100001">CRC-16-CCITT (x^16 + x^12 + x^5 + 1)</option>
+                                            <option value="100000100110000010001110110110111">CRC-32-IEEE 802.3</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Checksum Options -->
+                                    <div id="sim-checksum-options" class="form-group-sub" style="display:none;">
+                                        <label for="sim-chk-words">Checksum Word Size:</label>
+                                        <select id="sim-chk-words" class="form-control">
+                                            <option value="8" selected>8-bit words (Standard 8-bit Checksum)</option>
+                                            <option value="16">16-bit words (RFC 1071 Internet Checksum)</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Concise Explanation & Learn Collapsible -->
+                                    <p class="form-hint" id="sim-tech-short-desc">Uses polynomial XOR division over GF(2) to generate an 8-bit remainder.</p>
+                                </div>
+
+                                <!-- STEP 3: SELECT ERROR PATTERN -->
+                                <div class="step-card">
+                                    <div class="step-header">
+                                        <div class="step-number">3</div>
+                                        <div class="step-title">Select Physical Channel Error Pattern</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <select id="sim-error-select" class="form-control" onchange="handleErrorSelectionChange()">
+                                            <option value="clean">1. Clean Transmission (No Channel Errors)</option>
+                                            <option value="single" selected>2. Single-Bit Error (1 Random Bit Flip)</option>
+                                            <option value="multiple">3. Multiple-Bit Errors (Scattered Random Flips)</option>
+                                            <option value="burst">4. Burst Error (Textbook Span Noise)</option>
+                                            <option value="consecutive_burst">5. Consecutive Burst Error (100% Solid Span)</option>
+                                            <option value="multiple_burst">6. Multiple Burst Errors (Separated Episodes)</option>
+                                            <option value="manual">7. Manual Error Injection (Exact Bit Indices)</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Dynamic Error Inputs -->
+                                    <div id="wrap-multi-count" class="form-group-sub" style="display:none;">
+                                        <label for="sim-param-multi">Errors to inject (bits):</label>
+                                        <input type="number" id="sim-param-multi" class="form-control" value="2" min="1" max="128">
+                                    </div>
+
+                                    <div id="wrap-burst-span" class="form-group-sub" style="display:none;">
+                                        <label for="sim-param-burst">Burst span length (bits):</label>
+                                        <input type="number" id="sim-param-burst" class="form-control" value="4" min="2" max="64">
+                                    </div>
+
+                                    <div id="wrap-consec-span" class="form-group-sub" style="display:none;">
+                                        <label for="sim-param-consec">Consecutive span length (bits):</label>
+                                        <input type="number" id="sim-param-consec" class="form-control" value="4" min="2" max="64">
+                                        <span class="form-hint">Every contiguous bit within this window will be flipped (100% solid noise).</span>
+                                    </div>
+
+                                    <div id="wrap-multiburst-spec" class="form-group-sub" style="display:none;">
+                                        <div style="display:flex; gap:10px;">
+                                            <div style="flex:1;">
+                                                <label for="sim-param-mb-count">Number of Bursts:</label>
+                                                <input type="number" id="sim-param-mb-count" class="form-control" value="2" min="2" max="6">
+                                            </div>
+                                            <div style="flex:1;">
+                                                <label for="sim-param-mb-len">Bits per Burst:</label>
+                                                <input type="number" id="sim-param-mb-len" class="form-control" value="3" min="1" max="16">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="wrap-manual-spec" class="form-group-sub" style="display:none;">
+                                        <label for="sim-param-manual">Bit positions to flip (0-indexed, comma-separated):</label>
+                                        <input type="text" id="sim-param-manual" class="form-control" placeholder="e.g. 0, 3, 5">
+                                    </div>
+                                </div>
+
+                                <!-- STEP 4: EXECUTE BUTTON -->
+                                <button type="submit" id="btn-start-transmission" class="btn btn-primary btn-block">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                    Start Transmission
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Right Visualization & Results Column -->
+                        <div class="simulator-display">
+                            <!-- Empty Initial State -->
+                            <div id="sim-empty-state" class="card empty-state">
+                                <div class="empty-icon">&#8644;</div>
+                                <h3 style="color:var(--primary-dark); margin-bottom:8px;">Ready for Transmission Simulation</h3>
+                                <p>Select your payload, choose an error detection technique, configure the physical channel noise model, and click <strong>Start Transmission</strong>.</p>
+                            </div>
+
+                            <!-- Visualization & Results Container -->
+                            <div id="sim-active-results" style="display:none;">
+                                <!-- STEP 5: VISUALIZE TRANSMISSION -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <div>
+                                            <h3 class="card-title">Step-by-Step Transmission Visualization</h3>
+                                            <p class="card-desc">Observing bit-level transformations from transmitter encoding to receiver verification.</p>
+                                        </div>
+                                        <div id="sim-verdict-pill" class="badge badge-neutral">Status</div>
+                                    </div>
+
+                                    <div class="timeline-pipeline">
+                                        <!-- Stage A: Original Data -->
+                                        <div class="vis-stage">
+                                            <div class="vis-stage-header">
+                                                <span class="vis-stage-tag vis-sender-tag">A. Original Data (Sender Payload)</span>
+                                                <span class="vis-stage-meta" id="vis-meta-orig">Length: -</span>
+                                            </div>
+                                            <div class="bit-stream-box" id="vis-stream-orig"></div>
+                                        </div>
+
+                                        <!-- Stage B: Encoded Data -->
+                                        <div class="vis-stage">
+                                            <div class="vis-stage-header">
+                                                <span class="vis-stage-tag vis-sender-tag">B. Encoded Data (Payload + Redundancy Bits)</span>
+                                                <span class="vis-stage-meta" id="vis-meta-enc">Overhead: -</span>
+                                            </div>
+                                            <div class="bit-stream-box" id="vis-stream-enc"></div>
+                                            <span class="form-hint" style="color:var(--primary);">Dark text = Payload bits | Forest Green with underline = Redundant check bits</span>
+                                        </div>
+
+                                        <!-- Stage C & D: Transmission Channel & Error Injection -->
+                                        <div class="vis-stage">
+                                            <div class="vis-stage-header">
+                                                <span class="vis-stage-tag vis-channel-tag">C & D. Transmission Channel & Noise Injection</span>
+                                                <span class="vis-stage-meta" id="vis-meta-chan">Flipped: -</span>
+                                            </div>
+                                            <div class="bit-stream-box" id="vis-stream-chan"></div>
+                                            <span class="form-hint" style="color:var(--status-error-text);">Muted Red with underline = Bit inverted by physical channel noise</span>
+
+                                            <div class="channel-etiology-grid">
+                                                <div class="etiology-card">
+                                                    <span class="etiology-label">Physical Channel Cause:</span>
+                                                    <p class="etiology-text" id="vis-cause-text">-</p>
+                                                </div>
+                                                <div class="etiology-card">
+                                                    <span class="etiology-label">Injection Mechanism:</span>
+                                                    <p class="etiology-text" id="vis-mechanism-text">-</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Stage E: Receiver Data -->
+                                        <div class="vis-stage">
+                                            <div class="vis-stage-header">
+                                                <span class="vis-stage-tag vis-receiver-tag">E. Receiver Data (Incoming Frame)</span>
+                                                <span class="vis-stage-meta" id="vis-meta-recv">Received: -</span>
+                                            </div>
+                                            <div class="bit-stream-box" id="vis-stream-recv"></div>
+                                        </div>
+
+                                        <!-- Stage F: Error Detection Result -->
+                                        <div class="vis-stage">
+                                            <div class="vis-stage-header">
+                                                <span class="vis-stage-tag vis-receiver-tag">F. Error Detection Verdict</span>
+                                                <span class="vis-stage-meta" id="vis-meta-verdict">-</span>
+                                            </div>
+                                            <div class="explanation-card">
+                                                <h4 id="vis-verdict-title">Detection Result</h4>
+                                                <p id="vis-explanation-text">-</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- STEP 6: RESULTS & METRICS -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <div>
+                                            <h3 class="card-title">Transmission Performance Metrics</h3>
+                                            <p class="card-desc">Quantitative evaluation of bandwidth penalty and computational latency.</p>
+                                        </div>
+                                    </div>
+                                    <div class="metrics-pill-grid">
+                                        <div class="metric-pill">
+                                            <span class="mp-label">Payload Size</span>
+                                            <span class="mp-val" id="res-val-payload">-</span>
+                                        </div>
+                                        <div class="metric-pill">
+                                            <span class="mp-label">Frame Size</span>
+                                            <span class="mp-val" id="res-val-frame">-</span>
+                                        </div>
+                                        <div class="metric-pill">
+                                            <span class="mp-label">Redundancy Bits</span>
+                                            <span class="mp-val" id="res-val-overhead-bits">-</span>
+                                        </div>
+                                        <div class="metric-pill">
+                                            <span class="mp-label">Bandwidth Overhead</span>
+                                            <span class="mp-val" id="res-val-overhead-pct">-</span>
+                                        </div>
+                                        <div class="metric-pill">
+                                            <span class="mp-label">Total Latency</span>
+                                            <span class="mp-val" id="res-val-latency">-</span>
+                                        </div>
+                                        <div class="metric-pill">
+                                            <span class="mp-label">Detection Status</span>
+                                            <span class="mp-val" id="res-val-status">-</span>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3 text-center">
+                                        <button class="btn btn-secondary" onclick="resetSimulatorView()">Run Another Simulation</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+
+                <!-- ============================================================== -->
+                <!-- PAGE 3: ERROR DETECTION (ALGORITHMS GUIDE)                     -->
+                <!-- ============================================================== -->
+                <section id="view-detection" class="page-view">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h2 class="card-title">Error Detection Techniques Guide</h2>
+                                <p class="card-desc">Mathematical formulations, detection guarantees, and working principles of the four canonical schemes.</p>
+                            </div>
+                        </div>
+
+                        <div class="algorithms-grid">
+                            <!-- 1. VRC / Parity Check -->
+                            <div class="algo-card">
+                                <span class="algo-badge">Linear 1D Parity</span>
+                                <h3>Parity Check (VRC)</h3>
+                                <p>Vertical Redundancy Check appends 1 parity bit to ensure the total number of '1' bits is even (or odd). Minimum Hamming distance d_min = 2.</p>
+                                <div class="algo-specs">
+                                    <span><strong>Detection Guarantee:</strong> 100% of single-bit errors and all odd-number error counts.</span>
+                                    <span><strong>Blind Spot:</strong> Any even number of bit errors (2, 4, 6...) completely escapes detection.</span>
+                                    <span><strong>Redundancy:</strong> Exactly 1 bit per frame.</span>
+                                </div>
+                                <button class="btn btn-sm btn-outline" onclick="loadTraceForAlgo('vrc')">View Live Calculation Working</button>
+                            </div>
+
+                            <!-- 2. LRC -->
+                            <div class="algo-card">
+                                <span class="algo-badge">2D Block Parity</span>
+                                <h3>Longitudinal Redundancy Check (LRC)</h3>
+                                <p>Partitions data into fixed 8-bit blocks (rows) and computes column-by-column parity bits, forming a Block Check Character (BCC).</p>
+                                <div class="algo-specs">
+                                    <span><strong>Detection Guarantee:</strong> All single-bit errors and burst errors within a single block.</span>
+                                    <span><strong>Blind Spot:</strong> Even number of errors occurring in the exact same column position across different rows.</span>
+                                    <span><strong>Redundancy:</strong> 1 byte (8 bits) of BCC plus block alignment padding.</span>
+                                </div>
+                                <button class="btn btn-sm btn-outline" onclick="loadTraceForAlgo('lrc')">View Live Calculation Working</button>
+                            </div>
+
+                            <!-- 3. Checksum -->
+                            <div class="algo-card">
+                                <span class="algo-badge">Arithmetic 1's Complement</span>
+                                <h3>Internet Checksum (1's Complement)</h3>
+                                <p>Divides data into m-bit segments (default 8 bits; 16 bits for RFC 1071), sums them with end-around carry wrapping, and complements the result.</p>
+                                <div class="algo-specs">
+                                    <span><strong>Detection Guarantee:</strong> High detection for random errors; catches single-bit errors across all segments.</span>
+                                    <span><strong>Blind Spot:</strong> Transposed words or compensating errors (+k in one word and -k in another).</span>
+                                    <span><strong>Redundancy:</strong> Exactly 8 or 16 bits.</span>
+                                </div>
+                                <button class="btn btn-sm btn-outline" onclick="loadTraceForAlgo('checksum')">View Live Calculation Working</button>
+                            </div>
+
+                            <!-- 4. CRC -->
+                            <div class="algo-card">
+                                <span class="algo-badge">Polynomial Division (GF(2))</span>
+                                <h3>Cyclic Redundancy Check (CRC)</h3>
+                                <p>Treats bitstreams as polynomials over GF(2). Appends r zeros, divides by generator G(x) using XOR modulo-2 division, and transmits remainder.</p>
+                                <div class="algo-specs">
+                                    <span><strong>Detection Guarantee:</strong> 100% of single-bit errors, all odd errors (if G has (x+1) factor), all burst errors of length &le; r.</span>
+                                    <span><strong>Blind Spot:</strong> Error polynomials E(x) that are exact multiples of G(x) (probability &approx; 2^-r).</span>
+                                    <span><strong>Redundancy:</strong> Exactly r bits (8 bits for CRC-8, 16 for CRC-16, 32 for CRC-32).</span>
+                                </div>
+                                <button class="btn btn-sm btn-outline" onclick="loadTraceForAlgo('crc')">View Live Calculation Working</button>
+                            </div>
+                        </div>
+
+                        <!-- Live Working Trace Display -->
+                        <div class="traces-box" id="algo-trace-section">
+                            <div class="card-header">
+                                <div>
+                                    <h3 class="card-title" id="algo-trace-title">Algorithm Working Trace</h3>
+                                    <p class="card-desc">Live educational calculation generated directly by Python backend execution.</p>
+                                </div>
+                                <div style="display:flex; gap:8px;">
+                                    <button class="btn btn-sm btn-outline" onclick="loadTraceForAlgo('all')">Show All 4 Traces</button>
+                                </div>
+                            </div>
+                            <div id="algo-trace-content" class="trace-code">Click "View Live Calculation Working" on any algorithm above to inspect its step-by-step mathematical trace for active payload.</div>
+                        </div>
+                    </div>
+                </section>
+
+
+                <!-- ============================================================== -->
+                <!-- PAGE 4: ALGORITHM COMPARISON                                   -->
+                <!-- ============================================================== -->
+                <section id="view-comparison" class="page-view">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h2 class="card-title">Comparative Performance Analysis</h2>
+                                <p class="card-desc">Simultaneously evaluate all four techniques on identical payload and synchronized channel error conditions.</p>
+                            </div>
+                        </div>
+
+                        <div class="comparison-controls">
+                            <div class="comp-col">
+                                <label>Active Payload:</label>
+                                <input type="text" id="comp-payload-val" class="form-control code-input" value="{{ default_data }}" readonly>
+                            </div>
+                            <div class="comp-col">
+                                <label for="comp-err-type">Channel Error Model:</label>
+                                <select id="comp-err-type" class="form-control" onchange="handleCompErrorChange()">
+                                    <option value="clean">Clean Transmission (0 errors)</option>
+                                    <option value="single">Single-Bit Error (1 bit)</option>
+                                    <option value="multiple" selected>Multiple-Bit Errors</option>
+                                    <option value="burst">Burst Error (Span)</option>
+                                    <option value="consecutive_burst">Consecutive Burst (100% Solid)</option>
+                                    <option value="multiple_burst">Multiple Burst Episodes</option>
+                                </select>
+                            </div>
+                            <div class="comp-col" id="comp-amount-col">
+                                <label id="comp-amount-label">Bit Error Count:</label>
+                                <input type="number" id="comp-err-amount" class="form-control" value="2" min="1" max="64">
+                            </div>
+                            <div class="comp-col btn-col">
+                                <button type="button" class="btn btn-primary" onclick="executeComparison()">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                                    Run Synchronized Comparison
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Results Table -->
+                        <div class="table-responsive" id="comp-table-wrap">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Technique</th>
+                                        <th>Overhead (Bits / %)</th>
+                                        <th>Processing Latency</th>
+                                        <th>Corrupted Positions</th>
+                                        <th>Detection Status</th>
+                                        <th>Final Verdict</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="comp-results-tbody">
+                                    <tr><td colspan="6" class="text-center">Click <strong>Run Synchronized Comparison</strong> to evaluate all four schemes concurrently.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Comparative Insights Cards -->
+                        <div class="comp-insights-grid">
+                            <div class="comp-insight-card">
+                                <h4 class="comp-insight-title">1. Parity Parity Invariance</h4>
+                                <p class="comp-insight-body">Simple 1D Parity (d_min=2) will always fail to detect any even number of corrupted bits (2, 4, 6...) regardless of payload size.</p>
+                            </div>
+                            <div class="comp-insight-card">
+                                <h4 class="comp-insight-title">2. LRC Matrix Orientation</h4>
+                                <p class="comp-insight-body">LRC catches bursts within a block, but fails when 2 errors hit identical column indices in different blocks.</p>
+                            </div>
+                            <div class="comp-insight-card">
+                                <h4 class="comp-insight-title">3. Checksum Arithmetic Bounds</h4>
+                                <p class="comp-insight-body">Checksum detects single-bit errors and bursts, but has blind spots if corruptions swap entire words or cancel out algebraically.</p>
+                            </div>
+                            <div class="comp-insight-card">
+                                <h4 class="comp-insight-title">4. CRC Polynomial Superiority</h4>
+                                <p class="comp-insight-body">CRC provides deterministic 100% protection against all burst errors &le; generator degree r, and misses random errors with probability ~2^-r.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+
+                <!-- ============================================================== -->
+                <!-- PAGE 5: EXPERIMENTAL ANALYSIS & ANALYTICAL GRAPHS              -->
+                <!-- ============================================================== -->
+                <section id="view-experiments" class="page-view">
+                    <!-- Benchmark Execution Card -->
+                    <div class="card" style="max-width:720px; margin:0 auto 24px auto;">
+                        <div class="card-header text-center" style="display:block;">
+                            <h3 class="card-title" style="text-align:center;">Benchmark Experiment Settings</h3>
+                            <p class="card-desc" style="text-align:center;">Configure payload sizes, error categories, and sample trials for batch empirical evaluation.</p>
+                        </div>
+                        <form id="exp-form" onsubmit="event.preventDefault(); runBenchmarkSweep();">
+                            <div class="form-group">
+                                <label for="exp-sizes">Data Payload Sizes (bits, comma-separated):</label>
+                                <input type="text" id="exp-sizes" class="form-control" value="32, 64, 128, 256, 512">
+                                <span class="form-hint">Default: 32, 64, 128, 256, 512</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="exp-mags">Multi-Bit Error Amounts (bits):</label>
+                                <input type="text" id="exp-mags" class="form-control" value="1, 2, 3, 4, 5, 8">
+                                <span class="form-hint">Default: 1, 2, 3, 4, 5, 8</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="exp-bursts">Burst Spans (bits):</label>
+                                <input type="text" id="exp-bursts" class="form-control" value="2, 4, 8, 16">
+                                <span class="form-hint">Default: 2, 4, 8, 16</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="exp-trials">Trials per Configuration:</label>
+                                <input type="number" id="exp-trials" class="form-control" value="1000" min="5" max="5000">
+                                <span class="form-hint">1000 trials recommended for statistical accuracy to reflect true ~0.39% CRC-8 miss rates.</span>
+                            </div>
+
+                            <button type="submit" id="btn-run-benchmark" class="btn btn-primary btn-block">
+                                Update Performance Visualizations & Metrics
+                            </button>
+                        </form>
+
+                        <div id="exp-progress-box" class="exp-progress-box mt-3" style="display:none;">
+                            <div class="spinner"></div>
+                            <span id="exp-progress-text">Running benchmark experiments... Please wait.</span>
+                        </div>
+                    </div>
+
+                    <!-- The 4 Analytical Visualizations -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h2 class="card-title">Analytical Performance Visualizations</h2>
+                                <p class="card-desc">The four analytical graphs rendered directly by the backend visualization suite at 300 DPI.</p>
+                            </div>
+                        </div>
+
+                        <div class="charts-grid">
+                            <!-- Graph 1 -->
+                            <div class="chart-card">
+                                <div class="chart-card-header">
+                                    <h3>1. Detection Rate by Error Type</h3>
+                                    <p>Evaluates VRC parity limitations vs LRC, Checksum, and CRC</p>
+                                </div>
+                                <div class="chart-img-wrapper" onclick="openGraphModal('detection_rate_by_error_type.png', 'Detection Rate by Error Type')">
+                                    <img id="img-chart1" src="/api/graphs/detection_rate_by_error_type.png" alt="Detection Rate by Error Type" class="chart-img">
+                                </div>
+                            </div>
+
+                            <!-- Graph 2 -->
+                            <div class="chart-card">
+                                <div class="chart-card-header">
+                                    <h3>2. Detection Rate vs Error Magnitude</h3>
+                                    <p>Demonstrates 100% odd vs 0% even parity behavior</p>
+                                </div>
+                                <div class="chart-img-wrapper" onclick="openGraphModal('detection_rate_vs_error_magnitude.png', 'Detection Rate vs Error Magnitude')">
+                                    <img id="img-chart2" src="/api/graphs/detection_rate_vs_error_magnitude.png" alt="Detection Rate vs Error Magnitude" class="chart-img">
+                                </div>
+                            </div>
+
+                            <!-- Graph 3 -->
+                            <div class="chart-card">
+                                <div class="chart-card-header">
+                                    <h3>3. Processing Time vs Data Size</h3>
+                                    <p>Computational latency across varying payload scales</p>
+                                </div>
+                                <div class="chart-img-wrapper" onclick="openGraphModal('processing_time_vs_data_size.png', 'Processing Time vs Data Size')">
+                                    <img id="img-chart3" src="/api/graphs/processing_time_vs_data_size.png" alt="Processing Time vs Data Size" class="chart-img">
+                                </div>
+                            </div>
+
+                            <!-- Graph 4 -->
+                            <div class="chart-card">
+                                <div class="chart-card-header">
+                                    <h3>4. Transmission Overhead vs Data Size</h3>
+                                    <p>Bandwidth penalty ratio curve as payload scales</p>
+                                </div>
+                                <div class="chart-img-wrapper" onclick="openGraphModal('overhead_vs_data_size.png', 'Transmission Overhead vs Data Size')">
+                                    <img id="img-chart4" src="/api/graphs/overhead_vs_data_size.png" alt="Transmission Overhead vs Data Size" class="chart-img">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Table -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">Aggregated Performance Metrics</h3>
+                                <p class="card-desc">Extracted from empirical benchmark results in <code>metrics_results.csv</code></p>
+                            </div>
+                            <input type="text" id="metrics-search-input" class="form-control" style="max-width:240px;" placeholder="Search metrics..." oninput="filterMetricsTable()">
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table" id="metrics-table">
+                                <thead>
+                                    <tr>
+                                        <th>Technique</th>
+                                        <th>Error Model</th>
+                                        <th>Payload Size</th>
+                                        <th>Error Amount</th>
+                                        <th>Trials</th>
+                                        <th>Detection Rate</th>
+                                        <th>Avg Latency (µs)</th>
+                                        <th>Overhead (%)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="metrics-table-body">
+                                    <tr><td colspan="8" class="text-center">Loading benchmark metrics...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+            </main>
         </div>
-    </header>
+    </div>
 
-    <!-- Global Active Session Data Bar -->
-    <section class="session-bar">
-        <div class="container session-flex">
-            <div class="session-info">
-                <span class="session-label">Active Session Payload:</span>
-                <code id="global-data-display" class="session-code">{{ default_data }}</code>
-                <span id="global-data-length" class="session-length">({{ default_data|length }} bits)</span>
-            </div>
-            <div class="session-actions">
-                <button class="btn btn-sm btn-secondary" onclick="openDataModal()">Change Payload</button>
-                <button class="btn btn-sm btn-outline" onclick="generateRandomData()">Random (16-bit)</button>
-                <button class="btn btn-sm btn-outline" onclick="quickTextPrompt()">ASCII to Binary</button>
-            </div>
-        </div>
-    </section>
-
-    <!-- Navigation Tabs -->
-    <nav class="nav-tabs container">
-        <button class="tab-btn active" data-tab="tab-simulator">1. Transmission Simulator</button>
-        <button class="tab-btn" data-tab="tab-compare">2. Compare Techniques</button>
-        <button class="tab-btn" data-tab="tab-algorithm">3. Algorithm Working</button>
-        <button class="tab-btn" data-tab="tab-experiments">4. Experiments & Analytical Graphs</button>
-    </nav>
-
-    <!-- Main Container -->
-    <main class="container main-content">
-
-        <!-- ============================================================== -->
-        <!-- TAB 1: TRANSMISSION SIMULATOR                                 -->
-        <!-- ============================================================== -->
-        <section id="tab-simulator" class="tab-pane active">
-            <div class="panel-grid">
-                <!-- Configuration Card -->
-                <div class="card config-card">
-                    <div class="card-header">
-                        <h2>Transmission Parameters</h2>
-                        <p class="card-desc">Configure sender protection scheme and physical channel corruption model.</p>
-                    </div>
-                    <form id="sim-form" onsubmit="handleSimulate(event)">
-                        <div class="form-group">
-                            <label for="sim-data">Payload Data (Binary):</label>
-                            <input type="text" id="sim-data" class="form-control code-input" value="{{ default_data }}" required spellcheck="false">
-                            <span class="form-hint">Uses active session data. You can edit here to change for this test.</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sim-technique">Error Detection Technique:</label>
-                            <select id="sim-technique" class="form-control" onchange="toggleSimTechniqueOptions()">
-                                <option value="VRC / Parity">VRC / Parity (Even Parity - 1 bit)</option>
-                                <option value="LRC">LRC (Longitudinal Redundancy Check - 8-bit)</option>
-                                <option value="Checksum">Checksum (1's Complement - 8-bit)</option>
-                                <option value="CRC" selected>CRC (Cyclic Redundancy Check)</option>
-                            </select>
-                        </div>
-
-                        <!-- CRC Specific Options -->
-                        <div id="sim-crc-options" class="form-group-sub">
-                            <label for="sim-crc-poly">CRC Generator Polynomial:</label>
-                            <select id="sim-crc-poly" class="form-control">
-                                <option value="100000111">CRC-8 (x^8 + x^2 + x + 1)</option>
-                                <option value="11000000000000101">CRC-16-IBM (x^16 + x^15 + x^2 + 1)</option>
-                                <option value="10001000000100001">CRC-16-CCITT (x^16 + x^12 + x^5 + 1)</option>
-                                <option value="100000100110000010001110110110111">CRC-32-IEEE 802.3</option>
-                            </select>
-                        </div>
-
-                        <!-- Checksum Specific Options -->
-                        <div id="sim-checksum-options" class="form-group-sub" style="display:none;">
-                            <label for="sim-chk-size">Word Size (bits):</label>
-                            <select id="sim-chk-size" class="form-control">
-                                <option value="8" selected>8-bit words (Checksum 8-bit)</option>
-                                <option value="16">16-bit words (Internet Checksum RFC 1071)</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sim-error-type">Physical Channel Error Model:</label>
-                            <select id="sim-error-type" class="form-control" onchange="toggleSimErrorInputs()">
-                                <option value="clean">1. Clean transmission (No channel errors)</option>
-                                <option value="single" selected>2. Single-bit error (Random or specified bit)</option>
-                                <option value="multiple">3. Multiple-bit error (Independent bit flips)</option>
-                                <option value="burst">4. Burst error (Textbook span error)</option>
-                                <option value="consecutive_burst">5. Consecutive burst corruption (Solid contiguous span)</option>
-                                <option value="multiple_burst">6. Multiple burst errors (Separated burst episodes)</option>
-                                <option value="manual">7. Manual error injection (Specify bit indices)</option>
-                            </select>
-                        </div>
-
-                        <!-- Dynamic Error Parameters -->
-                        <div id="err-param-multi" class="form-group-sub" style="display:none;">
-                            <label for="sim-multi-count">Number of bit errors to inject:</label>
-                            <input type="number" id="sim-multi-count" class="form-control" value="2" min="1" max="128">
-                        </div>
-
-                        <div id="err-param-burst" class="form-group-sub" style="display:none;">
-                            <label for="sim-burst-len">Burst error span length (bits):</label>
-                            <input type="number" id="sim-burst-len" class="form-control" value="4" min="2" max="64">
-                        </div>
-
-                        <div id="err-param-consec-burst" class="form-group-sub" style="display:none;">
-                            <label for="sim-consec-burst-len">Consecutive burst span length (bits):</label>
-                            <input type="number" id="sim-consec-burst-len" class="form-control" value="4" min="2" max="64">
-                            <span class="form-hint">Every contiguous bit within this window will be inverted (100% continuous corruption).</span>
-                        </div>
-
-                        <div id="err-param-multi-burst" class="form-group-sub" style="display:none;">
-                            <div style="display:flex; gap:10px;">
-                                <div style="flex:1;">
-                                    <label for="sim-multi-burst-count">Number of bursts:</label>
-                                    <input type="number" id="sim-multi-burst-count" class="form-control" value="2" min="2" max="8">
-                                </div>
-                                <div style="flex:1;">
-                                    <label for="sim-multi-burst-len">Bits per burst:</label>
-                                    <input type="number" id="sim-multi-burst-len" class="form-control" value="3" min="1" max="16">
-                                </div>
-                            </div>
-                            <span class="form-hint">Multiple separated burst episodes across the frame to model recurring physical interference.</span>
-                        </div>
-
-                        <div id="err-param-manual" class="form-group-sub" style="display:none;">
-                            <label for="sim-manual-indices">Bit positions to flip (0-indexed, comma-separated):</label>
-                            <input type="text" id="sim-manual-indices" class="form-control" placeholder="e.g. 0, 3, 5">
-                            <span class="form-hint">Indices refer to bit positions in the protected transmitted frame.</span>
-                        </div>
-
-                        <button type="submit" id="btn-run-sim" class="btn btn-primary btn-block">
-                            Simulate Transmission Pipeline
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Simulation Output Report -->
-                <div class="card result-card">
-                    <div class="card-header">
-                        <h2>End-to-End Transmission Report</h2>
-                        <div id="sim-verdict-badge" class="badge badge-neutral">Awaiting Simulation</div>
-                    </div>
-
-                    <div id="sim-empty-state" class="empty-state">
-                        <div class="empty-icon">&#8644;</div>
-                        <p>Configure parameters on the left and click <strong>Simulate Transmission Pipeline</strong> to observe the Sender, Channel, and Receiver process.</p>
-                    </div>
-
-                    <div id="sim-results-container" style="display:none;">
-                        <!-- Stage 1: Sender -->
-                        <div class="pipeline-stage">
-                            <div class="stage-header">
-                                <span class="stage-tag stage-sender">Stage 1: Transmitter (Sender)</span>
-                                <span class="stage-meta" id="sim-stage1-meta">Redundancy: -</span>
-                            </div>
-                            <div class="stage-body">
-                                <div class="bit-row">
-                                    <span class="bit-label">Payload Data:</span>
-                                    <div class="bit-stream" id="sim-out-payload"></div>
-                                </div>
-                                <div class="bit-row">
-                                    <span class="bit-label">Protected Frame:</span>
-                                    <div class="bit-stream" id="sim-out-protected"></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Stage 2: Channel -->
-                        <div class="pipeline-stage">
-                            <div class="stage-header">
-                                <span class="stage-tag stage-channel">Stage 2: Physical Channel</span>
-                                <span class="stage-meta" id="sim-stage2-meta">Flipped: -</span>
-                            </div>
-                            <div class="stage-body">
-                                <div class="bit-row">
-                                    <span class="bit-label">Corrupted Frame:</span>
-                                    <div class="bit-stream" id="sim-out-corrupted"></div>
-                                </div>
-                                <div class="error-indices-tag" id="sim-out-indices"></div>
-
-                                <div class="channel-detail-grid mt-2">
-                                    <div class="channel-detail-card">
-                                        <span class="cd-label">Physical Channel Cause:</span>
-                                        <p id="sim-out-cause" class="cd-text">-</p>
-                                    </div>
-                                    <div class="channel-detail-card">
-                                        <span class="cd-label">Introduction Mechanism:</span>
-                                        <p id="sim-out-mechanism" class="cd-text">-</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Stage 3: Receiver -->
-                        <div class="pipeline-stage">
-                            <div class="stage-header">
-                                <span class="stage-tag stage-receiver">Stage 3: Receiver Verification</span>
-                                <span class="stage-meta" id="sim-stage3-meta">Latency: -</span>
-                            </div>
-                            <div class="stage-body">
-                                <div class="metrics-pill-grid">
-                                    <div class="metric-pill">
-                                        <span class="mp-label">Verification Result</span>
-                                        <span class="mp-val" id="sim-mp-valid">-</span>
-                                    </div>
-                                    <div class="metric-pill">
-                                        <span class="mp-label">Error Detection</span>
-                                        <span class="mp-val" id="sim-mp-detected">-</span>
-                                    </div>
-                                    <div class="metric-pill">
-                                        <span class="mp-label">Transmission Overhead</span>
-                                        <span class="mp-val" id="sim-mp-overhead">-</span>
-                                    </div>
-                                    <div class="metric-pill">
-                                        <span class="mp-label">Total Latency</span>
-                                        <span class="mp-val" id="sim-mp-latency">-</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Stage 4: Academic Explanation -->
-                        <div class="explanation-box">
-                            <h4>DCN Analytical Explanation:</h4>
-                            <p id="sim-out-explanation" class="explanation-text"></p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-
-        <!-- ============================================================== -->
-        <!-- TAB 2: COMPARE TECHNIQUES                                     -->
-        <!-- ============================================================== -->
-        <section id="tab-compare" class="tab-pane">
-            <div class="card">
-                <div class="card-header">
-                    <h2>Comparative Performance Analysis</h2>
-                    <p class="card-desc">Evaluate VRC / Parity, LRC, Checksum, and CRC on identical data and equivalent physical error conditions.</p>
-                </div>
-
-                <div class="compare-controls-bar">
-                    <div class="control-col">
-                        <label>Payload:</label>
-                        <code id="comp-data-preview" class="session-code"></code>
-                    </div>
-                    <div class="control-col">
-                        <label for="comp-error-type">Error Model:</label>
-                        <select id="comp-error-type" class="form-control" onchange="toggleCompErrorInputs()">
-                            <option value="clean">Clean transmission (0 errors)</option>
-                            <option value="single">Single-bit error (1 random bit)</option>
-                            <option value="multiple" selected>Multiple-bit error</option>
-                            <option value="burst">Burst error (random flips in span)</option>
-                            <option value="consecutive_burst">Consecutive burst error (100% solid)</option>
-                            <option value="multiple_burst">Multiple burst errors (separated)</option>
-                            <option value="manual">Manual error positions</option>
-                        </select>
-                    </div>
-                    <div class="control-col" id="comp-amount-col">
-                        <label id="comp-amount-label">Error Bit Count:</label>
-                        <input type="number" id="comp-error-amount" class="form-control" value="2" min="1" max="64">
-                    </div>
-                    <div class="control-col" id="comp-multi-col" style="display:none;">
-                        <label>Burst Episodes:</label>
-                        <div style="display:flex; gap:6px; align-items:center;">
-                            <input type="number" id="comp-multi-burst-count" class="form-control" value="2" min="2" max="5" style="width:75px;" title="Number of separated burst episodes">
-                            <span style="font-size:0.8rem; color:var(--text-muted);">eps &times;</span>
-                            <input type="number" id="comp-multi-burst-len" class="form-control" value="3" min="2" max="16" style="width:75px;" title="Span of each burst episode">
-                            <span style="font-size:0.8rem; color:var(--text-muted);">bits</span>
-                        </div>
-                    </div>
-                    <div class="control-col" id="comp-manual-col" style="display:none;">
-                        <label>Positions (0-indexed):</label>
-                        <input type="text" id="comp-manual-positions" class="form-control" placeholder="e.g. 1, 4">
-                    </div>
-                    <div class="control-col btn-col">
-                        <button class="btn btn-primary" onclick="handleRunComparison()">Run Comparison</button>
-                    </div>
-                </div>
-
-                <div id="comp-results-container" class="mt-4">
-                    <div id="comp-empty" class="empty-state">
-                        <p>Click <strong>Run Comparison</strong> to execute all four techniques under synchronized error conditions.</p>
-                    </div>
-
-                    <div id="comp-table-wrapper" style="display:none;">
-                        <table class="table compare-table">
-                            <thead>
-                                <tr>
-                                    <th>Technique</th>
-                                    <th>Overhead</th>
-                                    <th>Processing Time</th>
-                                    <th>Corrupted Positions</th>
-                                    <th>Detection Status</th>
-                                    <th>Final Verdict</th>
-                                </tr>
-                            </thead>
-                            <tbody id="comp-table-body"></tbody>
-                        </table>
-
-                        <div id="comp-explanations-grid" class="comp-cards-grid mt-4"></div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-
-        <!-- ============================================================== -->
-        <!-- TAB 3: ALGORITHM WORKING                                      -->
-        <!-- ============================================================== -->
-        <section id="tab-algorithm" class="tab-pane">
-            <div class="card">
-                <div class="card-header">
-                    <h2>Step-by-Step Algorithm Demonstrations</h2>
-                    <p class="card-desc">Detailed mathematical traces generated directly by the backend implementations for educational demonstration.</p>
-                </div>
-
-                <div class="algo-selector-bar">
-                    <div class="algo-nav-btns">
-                        <button class="btn btn-sm btn-outline active" onclick="loadAlgorithmTrace('all', this)">All Techniques</button>
-                        <button class="btn btn-sm btn-outline" onclick="loadAlgorithmTrace('vrc', this)">VRC / Parity</button>
-                        <button class="btn btn-sm btn-outline" onclick="loadAlgorithmTrace('lrc', this)">LRC</button>
-                        <button class="btn btn-sm btn-outline" onclick="loadAlgorithmTrace('checksum', this)">Checksum</button>
-                        <button class="btn btn-sm btn-outline" onclick="loadAlgorithmTrace('crc', this)">CRC</button>
-                    </div>
-                    <div class="algo-options">
-                        <label>CRC Poly:</label>
-                        <select id="algo-crc-gen" class="form-control form-control-sm" onchange="refreshAlgorithmTrace()">
-                            <option value="100000111">CRC-8 (100000111)</option>
-                            <option value="11000000000000101">CRC-16-IBM</option>
-                            <option value="10001000000100001">CRC-16-CCITT</option>
-                        </select>
-                        <label>Word Size:</label>
-                        <select id="algo-chk-size" class="form-control form-control-sm" onchange="refreshAlgorithmTrace()">
-                            <option value="8" selected>8-bit</option>
-                            <option value="16">16-bit</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div id="algo-traces-container" class="traces-container mt-3">
-                    <div class="loading-state">Loading algorithm traces...</div>
-                </div>
-            </div>
-        </section>
-
-
-        <!-- ============================================================== -->
-        <!-- TAB 4: EXPERIMENTS & ANALYTICAL GRAPHS                        -->
-        <!-- ============================================================== -->
-        <section id="tab-experiments" class="tab-pane">
-            <div class="benchmark-center-wrapper">
-                <!-- Benchmark Configuration Card -->
-                <div class="card benchmark-card">
-                    <div class="card-header text-center" style="display:block;">
-                        <h2 style="text-align:center;">Benchmark Settings</h2>
-                        <p class="card-desc" style="text-align:center;">Configure payload sizes, error categories, and sample trials for batch empirical evaluation.</p>
-                    </div>
-                    <form id="exp-form" onsubmit="event.preventDefault(); handleRunExperiments(event); return false;">
-                        <div class="form-group">
-                            <label for="exp-sizes">Data Payload Sizes (bits, comma-separated):</label>
-                            <input type="text" id="exp-sizes" class="form-control" value="32, 64, 128, 256, 512">
-                            <span class="form-hint">Default: 32, 64, 128, 256, 512</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="exp-mags">Multi-Bit Error Amounts (bits):</label>
-                            <input type="text" id="exp-mags" class="form-control" value="1, 2, 3, 4, 5, 8">
-                            <span class="form-hint">Default: 1, 2, 3, 4, 5, 8</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="exp-bursts">Burst Spans (bits):</label>
-                            <input type="text" id="exp-bursts" class="form-control" value="2, 4, 8, 16">
-                            <span class="form-hint">Default: 2, 4, 8, 16</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="exp-trials">Trials per Configuration:</label>
-                            <input type="number" id="exp-trials" class="form-control" value="1000" min="5" max="5000">
-                            <span class="form-hint">Recommended: 1000 for full statistical evaluation (avoids false 100% CRC), or 50-100 for fast interactive tests.</span>
-                        </div>
-
-                        <button type="button" id="btn-run-exp" class="btn btn-primary btn-block" onclick="handleRunExperiments(event)">
-                            Update Performance Visualizations & Metrics
-                        </button>
-                    </form>
-
-                    <div id="exp-progress" class="exp-progress-box mt-3" style="display:none;">
-                        <div class="spinner"></div>
-                        <span id="exp-progress-text">Running benchmark experiments... Please wait.</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- The 4 Analytical Visualizations -->
-            <div class="card mt-4" id="charts-card">
-                <div class="card-header">
-                    <h2>Analytical Performance Visualizations</h2>
-                    <p class="card-desc">The four analytical graphs generated directly by the backend visualization suite at 300 DPI.</p>
-                </div>
-
-                <div class="charts-grid">
-                    <div class="chart-card">
-                        <div class="chart-header">
-                            <h3>1. Detection Rate by Error Type</h3>
-                            <span class="chart-sub">Evaluates VRC parity limitations vs LRC, Checksum, and CRC</span>
-                        </div>
-                        <div class="chart-img-wrapper" onclick="openGraphModal('detection_rate_by_error_type.png')">
-                            <img id="img-chart1" src="/api/graphs/detection_rate_by_error_type.png" alt="Detection Rate by Error Type" class="chart-img" onerror="handleChartError(this)">
-                        </div>
-                    </div>
-
-                    <div class="chart-card">
-                        <div class="chart-header">
-                            <h3>2. Detection Rate vs Error Magnitude</h3>
-                            <span class="chart-sub">Demonstrates 100% odd vs 0% even parity behavior</span>
-                        </div>
-                        <div class="chart-img-wrapper" onclick="openGraphModal('detection_rate_vs_error_magnitude.png')">
-                            <img id="img-chart2" src="/api/graphs/detection_rate_vs_error_magnitude.png" alt="Detection Rate vs Error Magnitude" class="chart-img" onerror="handleChartError(this)">
-                        </div>
-                    </div>
-
-                    <div class="chart-card">
-                        <div class="chart-header">
-                            <h3>3. Processing Time vs Data Size</h3>
-                            <span class="chart-sub">Computational latency across varying payload scales</span>
-                        </div>
-                        <div class="chart-img-wrapper" onclick="openGraphModal('processing_time_vs_data_size.png')">
-                            <img id="img-chart3" src="/api/graphs/processing_time_vs_data_size.png" alt="Processing Time vs Data Size" class="chart-img" onerror="handleChartError(this)">
-                        </div>
-                    </div>
-
-                    <div class="chart-card">
-                        <div class="chart-header">
-                            <h3>4. Transmission Overhead vs Data Size</h3>
-                            <span class="chart-sub">Bandwidth penalty ratio curve as payload scales</span>
-                        </div>
-                        <div class="chart-img-wrapper" onclick="openGraphModal('overhead_vs_data_size.png')">
-                            <img id="img-chart4" src="/api/graphs/overhead_vs_data_size.png" alt="Transmission Overhead vs Data Size" class="chart-img" onerror="handleChartError(this)">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Metrics Table -->
-            <div class="card mt-4">
-                <div class="card-header">
-                    <h2>Aggregated Performance Metrics</h2>
-                    <p class="card-desc">Extracted from <code class="code-pill">metrics_results.csv</code></p>
-                </div>
-                <div class="metrics-filter-bar">
-                    <input type="text" id="metrics-search" class="form-control form-control-sm" placeholder="Filter by technique or error type..." oninput="filterMetricsTable()">
-                    <span id="metrics-row-count" class="metrics-count">Loading metrics...</span>
-                </div>
-                <div class="table-responsive">
-                    <table class="table metrics-table" id="table-metrics">
-                        <thead>
-                            <tr>
-                                <th>Technique</th>
-                                <th>Error Model</th>
-                                <th>Payload Size</th>
-                                <th>Error Amount</th>
-                                <th>Trials</th>
-                                <th>Detection Rate</th>
-                                <th>Avg Latency (µs)</th>
-                                <th>Overhead (%)</th>
-                            </tr>
-                        </thead>
-                        <tbody id="metrics-table-body">
-                            <tr><td colspan="8" class="text-center">Loading benchmark metrics...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-    </main>
-
-    <!-- Modal: Change Payload Data -->
+    <!-- ============================================================== -->
+    <!-- MODAL: CHANGE PAYLOAD DATA                                      -->
+    <!-- ============================================================== -->
     <div id="data-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -496,15 +774,14 @@
                 <button class="modal-close" onclick="closeDataModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <p>Enter a binary bit sequence, plain ASCII text, or click Random:</p>
-                <input type="text" id="modal-data-input" class="form-control code-input" placeholder="e.g. 101100110011 or Hello" autofocus>
-                <div class="modal-options mt-2">
-                    <button class="btn btn-sm btn-outline" onclick="setModalRandom()">Random 16 bits</button>
-                    <button class="btn btn-sm btn-outline" onclick="setModalSample('8')">8-bit Sample</button>
-                    <button class="btn btn-sm btn-outline" onclick="setModalSample('16')">16-bit Sample</button>
-                    <button class="btn btn-sm btn-outline" onclick="setModalSample('32')">32-bit Sample</button>
+                <p style="font-size:0.86rem; color:var(--text-secondary); margin-bottom:10px;">Enter a binary bit sequence, plain ASCII text, or generate random bits:</p>
+                <input type="text" id="modal-data-input" class="form-control code-input" placeholder="e.g. 101100110011 or Hello">
+                <div class="quick-gen-bar mt-2">
+                    <button class="btn btn-sm btn-outline" onclick="setModalRandom(16)">Random 16-bit</button>
+                    <button class="btn btn-sm btn-outline" onclick="setModalRandom(32)">Random 32-bit</button>
+                    <button class="btn btn-sm btn-outline" onclick="setModalSample('ASCII')">Text "NET"</button>
                 </div>
-                <div id="modal-feedback" class="mt-2" style="display:none;"></div>
+                <div id="modal-feedback" class="mt-2" style="font-size:0.82rem; display:none;"></div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeDataModal()">Cancel</button>
@@ -513,15 +790,17 @@
         </div>
     </div>
 
-    <!-- Modal: High-Res Graph View -->
+    <!-- ============================================================== -->
+    <!-- MODAL: HIGH-RES GRAPH ZOOM                                      -->
+    <!-- ============================================================== -->
     <div id="graph-modal" class="modal">
         <div class="modal-content modal-lg">
             <div class="modal-header">
-                <h3 id="modal-graph-title">Analytical Chart</h3>
+                <h3 id="modal-graph-title">Analytical Performance Visualization</h3>
                 <button class="modal-close" onclick="closeGraphModal()">&times;</button>
             </div>
             <div class="modal-body text-center">
-                <img id="modal-graph-img" src="" alt="High-Res Chart" class="modal-img">
+                <img id="modal-graph-img" src="" alt="Analytical Chart" class="modal-img">
             </div>
         </div>
     </div>

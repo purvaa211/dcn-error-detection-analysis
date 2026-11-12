@@ -1,7 +1,7 @@
-"""Flask Web Application for DCN Error Detection and Analysis.
+"""Flask Web Application for DCN Error Detection and Analysis System.
 
-Provides a clean browser interface communicating with the Python backend
-through the web_integration adapter layer.
+Provides an elegant, responsive engineering interface communicating with the Python backend
+and object-oriented core architecture through the web_integration adapter layer.
 """
 
 import os
@@ -16,10 +16,14 @@ if PROJECT_ROOT not in sys.path:
 
 from web_integration.adapter import (
     parse_input_data,
+    text_to_binary,
+    validate_binary_string,
     run_simulation,
     run_comparison,
     get_algorithm_working,
-    get_available_crc_polynomials
+    get_available_crc_polynomials,
+    get_overview_statistics,
+    get_simulation_history
 )
 from web_integration.experiment_service import experiment_service
 
@@ -39,13 +43,39 @@ DEFAULT_DATA = "1011011011001100"
 
 @app.route("/")
 def index():
-    """Render main application page."""
+    """Render main application page with sidebar layout."""
     current_data = session.get("session_data", DEFAULT_DATA)
     return render_template("index.html", default_data=current_data)
 
 
 # ======================================================================
-# SESSION API
+# OVERVIEW & HISTORY API
+# ======================================================================
+
+@app.route("/api/overview-stats", methods=["GET"])
+def api_overview_stats():
+    """Retrieve actual application stats and recent experiment history for the Overview page."""
+    stats = get_overview_statistics()
+    return jsonify({
+        "success": True,
+        **stats
+    })
+
+
+@app.route("/api/history", methods=["GET"])
+def api_history():
+    """Retrieve list of previous transmission experiments."""
+    limit = int(request.args.get("limit", 50))
+    records = get_simulation_history(limit=limit)
+    return jsonify({
+        "success": True,
+        "history": records,
+        "count": len(records)
+    })
+
+
+# ======================================================================
+# SESSION & DATA UTILITY API
 # ======================================================================
 
 @app.route("/api/session", methods=["GET"])
@@ -73,6 +103,27 @@ def update_session():
         "length": parsed["length"],
         "source_type": parsed["source_type"],
         "message": parsed["message"]
+    })
+
+
+@app.route("/api/convert-text", methods=["POST"])
+def api_convert_text():
+    """Convert ASCII text string into 8-bit binary representation."""
+    payload = request.get_json() or {}
+    text = payload.get("text", "")
+    if not text:
+        return jsonify({
+            "success": False,
+            "error": "Text input cannot be empty."
+        }), 400
+
+    binary_str = text_to_binary(text)
+    return jsonify({
+        "success": True,
+        "text": text,
+        "binary": binary_str,
+        "length": len(binary_str),
+        "message": f"Successfully converted '{text}' ({len(text)} chars) to {len(binary_str)}-bit binary representation."
     })
 
 
@@ -209,9 +260,9 @@ def api_experiments_run():
             bursts = [2, 4, 8, 16]
 
         try:
-            trials = int(payload.get("trials", 50))
+            trials = int(payload.get("trials", 1000))
         except (ValueError, TypeError):
-            trials = 50
+            trials = 1000
 
         run_res = experiment_service.run_benchmark(
             data_sizes=sizes,

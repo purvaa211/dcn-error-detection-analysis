@@ -1,7 +1,7 @@
 """Backend Adapter for DCN Error Detection System.
 
-Directly invokes the original untouched Python backend functions without modifying
-or duplicating any algorithm or simulation logic.
+Directly invokes the original Python backend and object-oriented core classes.
+Provides validation, session conversion, simulation execution, and persistent history tracking.
 """
 
 import sys
@@ -40,6 +40,7 @@ from simulation.simulator import (
     simulate,
     compare_all_techniques
 )
+from core.history import history_manager
 
 
 def validate_binary_string(data: str) -> Tuple[bool, str]:
@@ -58,7 +59,7 @@ def text_to_binary(text: str) -> str:
 
 
 def parse_input_data(user_input: str, default: str = "1011011011001100") -> Dict[str, Any]:
-    """Parse raw user input into validated binary string, matching the backend's behavior.
+    """Parse raw user input into validated binary string.
     
     Supports:
     1. Direct binary string (e.g. '1011011011001100')
@@ -196,15 +197,19 @@ def run_simulation(
             return {"success": False, "error": "At least one bit position must be specified for manual error."}
 
     try:
-        # Call original untouched backend simulation function
+        # Call simulation function
         sim_result = simulate(
             data=data,
             technique=technique,
             error_type=error_type,
             error_amount=parsed_amount,
             crc_generator=crc_generator,
-            checksum_word_size=checksum_word_size
+            checksum_word_size=checksum_word_size,
+            forced_indices=positions if error_type == "manual" and positions else None
         )
+
+        # Record in persistent history
+        history_manager.add_simulation(sim_result)
 
         sanitized = sanitize_for_json(sim_result)
         return {
@@ -257,9 +262,7 @@ def run_comparison(
         except (ValueError, TypeError):
             parsed_amount = 4
     elif error_type in ("multiple_burst", "multi_burst"):
-        if isinstance(error_amount, dict):
-            parsed_amount = error_amount
-        elif isinstance(error_amount, (list, tuple)):
+        if isinstance(error_amount, (dict, list, tuple)):
             parsed_amount = error_amount
         else:
             try:
@@ -280,7 +283,6 @@ def run_comparison(
             return {"success": False, "error": "At least one bit position must be specified for manual error."}
 
     try:
-        # Call original untouched backend compare_all_techniques function
         comp_results = compare_all_techniques(
             data=data,
             error_type=error_type,
@@ -360,3 +362,13 @@ def get_algorithm_working(
 def get_available_crc_polynomials() -> Dict[str, Any]:
     """Return the standard CRC polynomials defined in the backend."""
     return sanitize_for_json(CRC_POLYNOMIALS)
+
+
+def get_overview_statistics() -> Dict[str, Any]:
+    """Retrieve summary metrics and recent simulations for the Overview page."""
+    return sanitize_for_json(history_manager.get_summary())
+
+
+def get_simulation_history(limit: int = 50) -> List[Dict[str, Any]]:
+    """Retrieve historical experiments."""
+    return sanitize_for_json(history_manager.get_all(limit=limit))

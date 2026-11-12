@@ -1,13 +1,17 @@
-"""Visualization Suite for DCN Error Detection and Analysis.
+"""Visualization Suite for DCN Error Detection and Analysis System.
 
-Generates ONLY the four required analytical graphs:
+Generates the four required analytical graphs using the Warm Ivory + Forest Green palette:
 1. Detection Rate by Error Type and Technique (Grouped Bar Chart)
 2. Detection Rate versus Error Magnitude (Multi-Bit Curve showing Parity Limitation)
 3. Processing Time versus Data Size (Computational Latency Curve)
 4. Transmission Overhead versus Data Size (Bandwidth Penalty Curve)
 
-Ensures graphs use the latest experiment results, not stale data.
-Keeps clean transmissions separate from corrupted trials.
+Aesthetic Guidelines:
+- Clean warm ivory / white canvas (#FFFFFF / #FAF8F5).
+- Forest green primary data series (#315C49).
+- Muted olive and earthy complementary series (#7F9078, #B45309, #A84A48).
+- Subtle, unobtrusive gridlines (#E2DFD6).
+- Clear typography, legible annotations, and professional layout.
 """
 
 import os
@@ -18,11 +22,12 @@ import matplotlib.pyplot as plt
 
 OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Elegant Warm Ivory + Forest Green / Earth Engineering Palette
 TECH_COLORS = {
-    "VRC / Parity": "#E63946",  # Red
-    "LRC": "#457B9D",           # Steel Blue
-    "Checksum": "#F4A261",      # Sandy Orange
-    "CRC": "#2A9D8F"            # Teal Green
+    "VRC / Parity": "#A84A48",  # Muted Crimson
+    "LRC": "#7F9078",           # Muted Olive
+    "Checksum": "#B45309",      # Warm Amber / Terracotta
+    "CRC": "#315C49"            # Forest Green (Primary)
 }
 
 TECH_MARKERS = {
@@ -31,6 +36,23 @@ TECH_MARKERS = {
     "Checksum": "^",
     "CRC": "D"
 }
+
+
+def apply_academic_styling(ax, title: str, xlabel: str, ylabel: str):
+    """Apply consistent, professional styling across all charts."""
+    ax.set_facecolor("#FFFFFF")
+    ax.figure.patch.set_facecolor("#FAF9F5")
+
+    ax.set_title(title, fontsize=12, fontweight="bold", color="#244638", pad=12)
+    ax.set_xlabel(xlabel, fontsize=10, fontweight="bold", color="#292D2A", labelpad=8)
+    ax.set_ylabel(ylabel, fontsize=10, fontweight="bold", color="#292D2A", labelpad=8)
+
+    ax.tick_params(colors="#292D2A", labelsize=9)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#D5CFBF")
+    ax.spines["bottom"].set_color("#D5CFBF")
+    ax.grid(True, linestyle="--", alpha=0.45, color="#D5CFBF")
 
 
 def load_dataset(csv_path: str = "metrics_results.csv") -> Optional[pd.DataFrame]:
@@ -46,24 +68,16 @@ def load_dataset(csv_path: str = "metrics_results.csv") -> Optional[pd.DataFrame
 
 
 def plot_detection_by_error_type(df: pd.DataFrame, output_dir: Optional[str] = None) -> str:
-    """Graph 1: Detection Rate by Error Type and Technique (Grouped Bar Chart).
-
-    Clean transmissions are excluded from detection rate calculations
-    to avoid skewing error detection statistics.
-    """
-    # Filter to only corrupted trials
+    """Graph 1: Detection Rate by Error Type and Technique (Grouped Bar Chart)."""
     corrupted_df = df[df["error_type"].isin(["single", "multiple", "burst"])].copy()
     if corrupted_df.empty:
         return ""
 
-    # Aggregate overall detection rate by technique and error_type
     grouped = corrupted_df.groupby(["error_type", "technique"])["detection_rate"].mean().unstack("technique")
 
-    # Order error types logically
     order = [t for t in ["single", "multiple", "burst"] if t in grouped.index]
     grouped = grouped.reindex(order)
 
-    # Rename index for display
     display_labels = {
         "single": "Single-Bit Error",
         "multiple": "Multiple-Bit Errors",
@@ -72,6 +86,12 @@ def plot_detection_by_error_type(df: pd.DataFrame, output_dir: Optional[str] = N
     grouped.index = [display_labels.get(idx, idx) for idx in grouped.index]
 
     fig, ax = plt.subplots(figsize=(9, 5.5))
+    apply_academic_styling(
+        ax,
+        title="Detection Rate by Error Type and Technique",
+        xlabel="Physical Channel Error Model",
+        ylabel="Detection Rate (%)"
+    )
 
     techs = [t for t in ["VRC / Parity", "LRC", "Checksum", "CRC"] if t in grouped.columns]
     x = np.arange(len(grouped.index))
@@ -80,26 +100,36 @@ def plot_detection_by_error_type(df: pd.DataFrame, output_dir: Optional[str] = N
     for i, tech in enumerate(techs):
         vals = grouped[tech]
         color = TECH_COLORS.get(tech, "#333333")
-        rects = ax.bar(x + i * width - (len(techs) - 1) * width / 2, vals, width, label=tech, color=color, alpha=0.9)
+        rects = ax.bar(
+            x + i * width - (len(techs) - 1) * width / 2,
+            vals,
+            width,
+            label=tech,
+            color=color,
+            edgecolor="#FFFFFF",
+            linewidth=0.8,
+            alpha=0.92
+        )
 
-        # Value annotations
         for rect in rects:
             height = rect.get_height()
             if not np.isnan(height):
-                ax.annotate(f"{height:.1f}%",
-                            xy=(rect.get_x() + rect.get_width() / 2, height),
-                            xytext=(0, 3),
-                            textcoords="offset points",
-                            ha="center", va="bottom", fontsize=8, fontweight="bold")
+                ax.annotate(
+                    f"{height:.1f}%",
+                    xy=(rect.get_x() + rect.get_width() / 2, height),
+                    xytext=(0, 4),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                    fontweight="bold",
+                    color="#292D2A"
+                )
 
-    ax.set_title("Detection Rate by Error Type and Technique", fontsize=12, fontweight="bold")
-    ax.set_xlabel("Error Model", fontsize=10, fontweight="bold")
-    ax.set_ylabel("Detection Rate (%)", fontsize=10, fontweight="bold")
     ax.set_xticks(x)
-    ax.set_xticklabels(grouped.index, fontsize=10)
+    ax.set_xticklabels(grouped.index, fontsize=10, fontweight="bold")
     ax.set_ylim(0, 115)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.5)
-    ax.legend(loc="upper right", framealpha=0.9)
+    ax.legend(loc="upper right", framealpha=0.95, facecolor="#FFFFFF", edgecolor="#D5CFBF", fontsize=9)
 
     target_dir = output_dir or OUTPUT_DIR
     out_file = os.path.join(target_dir, "detection_rate_by_error_type.png")
@@ -119,6 +149,12 @@ def plot_detection_vs_error_magnitude(df: pd.DataFrame, output_dir: Optional[str
     sub = sub[sub["data_size"] == ref_size].sort_values("error_amount")
 
     fig, ax = plt.subplots(figsize=(8.5, 5))
+    apply_academic_styling(
+        ax,
+        title=f"Detection Rate vs Error Magnitude ({ref_size}-bit Payload)",
+        xlabel="Number of Injected Bit Errors",
+        ylabel="Detection Rate (%)"
+    )
 
     techs = [t for t in ["VRC / Parity", "LRC", "Checksum", "CRC"] if t in sub["technique"].values]
 
@@ -136,13 +172,9 @@ def plot_detection_vs_error_magnitude(df: pd.DataFrame, output_dir: Optional[str
             markersize=7
         )
 
-    ax.set_title(f"Detection Rate vs Error Magnitude ({ref_size}-bit Payload)", fontsize=12, fontweight="bold")
-    ax.set_xlabel("Number of Bit Errors", fontsize=10, fontweight="bold")
-    ax.set_ylabel("Detection Rate (%)", fontsize=10, fontweight="bold")
     ax.set_ylim(-5, 108)
     ax.set_xticks(sorted(sub["error_amount"].unique()))
-    ax.grid(True, linestyle="--", alpha=0.6)
-    ax.legend(loc="lower right", framealpha=0.9)
+    ax.legend(loc="lower right", framealpha=0.95, facecolor="#FFFFFF", edgecolor="#D5CFBF", fontsize=9)
 
     target_dir = output_dir or OUTPUT_DIR
     out_file = os.path.join(target_dir, "detection_rate_vs_error_magnitude.png")
@@ -160,6 +192,12 @@ def plot_processing_time_vs_data_size(df: pd.DataFrame, output_dir: Optional[str
 
     sub = sub.sort_values("data_size")
     fig, ax = plt.subplots(figsize=(8.5, 5))
+    apply_academic_styling(
+        ax,
+        title="Processing Time vs Data Size",
+        xlabel="Payload Size (bits)",
+        ylabel="Processing Latency (µs)"
+    )
 
     techs = [t for t in ["VRC / Parity", "LRC", "Checksum", "CRC"] if t in sub["technique"].values]
 
@@ -179,12 +217,8 @@ def plot_processing_time_vs_data_size(df: pd.DataFrame, output_dir: Optional[str
             markersize=7
         )
 
-    ax.set_title("Processing Time vs Data Size", fontsize=12, fontweight="bold")
-    ax.set_xlabel("Payload Size (bits)", fontsize=10, fontweight="bold")
-    ax.set_ylabel("Processing Latency (us)", fontsize=10, fontweight="bold")
     ax.set_xticks(sorted(sub["data_size"].unique()))
-    ax.grid(True, linestyle="--", alpha=0.6)
-    ax.legend(loc="upper left", framealpha=0.9)
+    ax.legend(loc="upper left", framealpha=0.95, facecolor="#FFFFFF", edgecolor="#D5CFBF", fontsize=9)
 
     target_dir = output_dir or OUTPUT_DIR
     out_file = os.path.join(target_dir, "processing_time_vs_data_size.png")
@@ -202,6 +236,12 @@ def plot_overhead_vs_data_size(df: pd.DataFrame, output_dir: Optional[str] = Non
 
     sub = sub.sort_values("data_size")
     fig, ax = plt.subplots(figsize=(8.5, 5))
+    apply_academic_styling(
+        ax,
+        title="Transmission Overhead vs Data Size",
+        xlabel="Payload Size (bits)",
+        ylabel="Overhead Ratio (%)"
+    )
 
     techs = [t for t in ["VRC / Parity", "LRC", "Checksum", "CRC"] if t in sub["technique"].values]
 
@@ -220,12 +260,8 @@ def plot_overhead_vs_data_size(df: pd.DataFrame, output_dir: Optional[str] = Non
             markersize=7
         )
 
-    ax.set_title("Transmission Overhead vs Data Size", fontsize=12, fontweight="bold")
-    ax.set_xlabel("Payload Size (bits)", fontsize=10, fontweight="bold")
-    ax.set_ylabel("Overhead Percentage (%)", fontsize=10, fontweight="bold")
     ax.set_xticks(sorted(sub["data_size"].unique()))
-    ax.grid(True, linestyle="--", alpha=0.6)
-    ax.legend(loc="upper right", framealpha=0.9)
+    ax.legend(loc="upper right", framealpha=0.95, facecolor="#FFFFFF", edgecolor="#D5CFBF", fontsize=9)
 
     target_dir = output_dir or OUTPUT_DIR
     out_file = os.path.join(target_dir, "overhead_vs_data_size.png")
@@ -236,16 +272,7 @@ def plot_overhead_vs_data_size(df: pd.DataFrame, output_dir: Optional[str] = Non
 
 
 def generate_all_plots(csv_path: str = "metrics_results.csv", output_dir: Optional[str] = None, verbose: bool = True) -> List[str]:
-    """Generate the four analytical graphs.
-
-    Args:
-        csv_path: Path to metrics results CSV.
-        output_dir: Target directory for generated PNG images (defaults to visualization/).
-        verbose: Whether to print console progress.
-
-    Returns:
-        List of generated file paths.
-    """
+    """Generate the four analytical graphs with Warm Ivory / Forest Green styling."""
     df = load_dataset(csv_path)
     if df is None:
         return []

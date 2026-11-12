@@ -1,211 +1,388 @@
 /**
- * Frontend Application Controller for DCN Error Detection System
- * Interacts with the Flask integration layer directly.
+ * Network Error Generation and Detection Analysis System
+ * Client-Side Application Controller
+ * 
+ * Features:
+ * - Sidebar page routing & view management
+ * - Interactive step-by-step transmission simulator
+ * - Real-time bitstream color-coded visualization (original, redundancy, flipped)
+ * - Text-to-binary ASCII conversion
+ * - Educational algorithm working calculations
+ * - Synchronized side-by-side algorithm comparison
+ * - Benchmark sweep runner & filterable metrics table
+ * - High-res analytical chart zoom modal
  */
 
-let currentSessionData = "1011011011001100";
-let activeAlgoTab = "all";
-let allMetricsRecords = [];
+// Application State
+const AppState = {
+    currentPage: "overview",
+    sessionData: "1011011011001100",
+    simInputMode: "binary", // "binary" or "text"
+    metricsData: [],
+    currentTraceAlgo: "all"
+};
 
-// ======================================================================
-// INITIALIZATION
-// ======================================================================
+// Page Metadata for Top Header Bar
+const PAGE_META = {
+    overview: {
+        title: "Overview",
+        desc: "Simulating unreliable communication channels and evaluating error detection techniques."
+    },
+    simulator: {
+        title: "Transmission Simulator",
+        desc: "Interactive step-by-step data framing, physical channel noise injection, and receiver error detection."
+    },
+    detection: {
+        title: "Error Detection",
+        desc: "Mathematical working principles and pedagogical traces for the four canonical techniques."
+    },
+    comparison: {
+        title: "Algorithm Comparison",
+        desc: "Synchronized side-by-side performance comparison on identical payload and channel error conditions."
+    },
+    experiments: {
+        title: "Experimental Analysis",
+        desc: "Batch Monte Carlo benchmark evaluation and 300 DPI analytical performance visualizations."
+    }
+};
+
+// ==========================================================================
+// INITIALIZATION & ROUTING
+// ==========================================================================
 
 document.addEventListener("DOMContentLoaded", () => {
-    initTabs();
-    fetchSessionData();
-    initExperimentsTab();
+    initLiveDate();
+    initSession();
+    loadOverviewStats();
+    loadMetricsTable();
+
+    // Check hash for direct deep-linking
+    const hash = window.location.hash.replace("#", "");
+    if (hash && PAGE_META[hash]) {
+        navigateToPage(hash);
+    } else {
+        navigateToPage("overview");
+    }
 });
 
-function initTabs() {
-    const tabButtons = document.querySelectorAll(".tab-btn");
-    tabButtons.forEach(btn => {
-        btn.addEventListener("click", () => {
-            tabButtons.forEach(b => b.classList.remove("active"));
-            document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
-
-            btn.classList.add("active");
-            const targetId = btn.getAttribute("data-tab");
-            const pane = document.getElementById(targetId);
-            if (pane) pane.classList.add("active");
-
-            // Lazy tab load
-            if (targetId === "tab-algorithm") {
-                loadAlgorithmTrace(activeAlgoTab);
-            } else if (targetId === "tab-experiments") {
-                checkExperimentStatus();
-                loadMetricsTable();
-            } else if (targetId === "tab-compare") {
-                updateCompareDataPreview();
-            }
-        });
-    });
+function initLiveDate() {
+    const el = document.getElementById("live-date-pill");
+    if (el) {
+        const options = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
+        el.textContent = new Date().toLocaleDateString("en-US", options);
+    }
 }
 
-// ======================================================================
-// SESSION DATA MANAGEMENT
-// ======================================================================
+function navigateToPage(pageId) {
+    if (!PAGE_META[pageId]) return;
+    AppState.currentPage = pageId;
 
-async function fetchSessionData() {
+    // Update Sidebar Navigation States
+    document.querySelectorAll(".nav-link").forEach(btn => {
+        if (btn.getAttribute("data-page") === pageId) {
+            btn.classList.add("active");
+        } else {
+            btn.classList.remove("active");
+        }
+    });
+
+    // Update Page View Displays
+    document.querySelectorAll(".page-view").forEach(view => {
+        view.classList.remove("active");
+    });
+    const targetView = document.getElementById(`view-${pageId}`);
+    if (targetView) targetView.classList.add("active");
+
+    // Update Top Header Info
+    const meta = PAGE_META[pageId];
+    const titleEl = document.getElementById("top-header-title");
+    const descEl = document.getElementById("top-header-desc");
+    if (titleEl) titleEl.textContent = meta.title;
+    if (descEl) descEl.textContent = meta.desc;
+
+    // Update URL Hash without reload
+    window.location.hash = pageId;
+
+    // View-specific trigger hooks
+    if (pageId === "overview") {
+        loadOverviewStats();
+    } else if (pageId === "detection") {
+        loadTraceForAlgo(AppState.currentTraceAlgo);
+    } else if (pageId === "comparison") {
+        updateCompPayloadDisplay();
+    }
+}
+
+// ==========================================================================
+// SESSION DATA MANAGEMENT
+// ==========================================================================
+
+async function initSession() {
     try {
         const res = await fetch("/api/session");
-        const data = await res.json();
-        if (data.success) {
-            updateSessionDisplay(data.data);
+        const json = await res.json();
+        if (json.success && json.data) {
+            setGlobalPayload(json.data);
         }
-    } catch (err) {
-        console.error("Failed to fetch session data:", err);
+    } catch (e) {
+        console.error("Session fetch failed, using default payload", e);
     }
 }
 
-function updateSessionDisplay(dataStr) {
-    currentSessionData = dataStr;
-    const disp = document.getElementById("global-data-display");
-    const len = document.getElementById("global-data-length");
-    const simInput = document.getElementById("sim-data");
-    const compPreview = document.getElementById("comp-data-preview");
+function setGlobalPayload(data) {
+    AppState.sessionData = data;
 
-    if (disp) disp.textContent = dataStr;
-    if (len) len.textContent = `(${dataStr.length} bits)`;
-    if (simInput) simInput.value = dataStr;
-    if (compPreview) compPreview.textContent = `${dataStr} (${dataStr.length} bits)`;
+    // Update Sidebar Pill
+    const sidePill = document.getElementById("sidebar-payload-display");
+    if (sidePill) sidePill.textContent = data;
+
+    // Update Simulator input if in binary mode
+    const simInput = document.getElementById("sim-data-input");
+    if (simInput && AppState.simInputMode === "binary") {
+        simInput.value = data;
+    }
+
+    // Update Comparison payload input
+    updateCompPayloadDisplay();
 }
 
-function updateCompareDataPreview() {
-    const compPreview = document.getElementById("comp-data-preview");
-    if (compPreview) compPreview.textContent = `${currentSessionData} (${currentSessionData.length} bits)`;
+function updateCompPayloadDisplay() {
+    const compInput = document.getElementById("comp-payload-val");
+    if (compInput) compInput.value = AppState.sessionData;
 }
 
-async function setSessionData(newRaw) {
+// ==========================================================================
+// OVERVIEW PAGE CONTROLLER
+// ==========================================================================
+
+async function loadOverviewStats() {
     try {
-        const res = await fetch("/api/session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ data: newRaw })
-        });
-        const result = await res.json();
-        if (result.success) {
-            updateSessionDisplay(result.data);
-            return result;
-        } else {
-            alert(result.error || "Failed to update session data.");
+        const res = await fetch("/api/overview-stats");
+        const json = await res.json();
+        if (!json.success) return;
+
+        // Populate Summary Cards
+        const simsEl = document.getElementById("stat-total-sims");
+        const errsEl = document.getElementById("stat-total-errors");
+        const detEl = document.getElementById("stat-avg-detection");
+        const algoEl = document.getElementById("stat-algo-count");
+
+        if (simsEl) simsEl.textContent = Number(json.total_simulations).toLocaleString();
+        if (errsEl) errsEl.textContent = Number(json.total_injected_errors).toLocaleString();
+        if (detEl) detEl.textContent = `${json.avg_detection_rate}%`;
+        if (algoEl) algoEl.textContent = json.algorithms_count || 4;
+
+        // Populate Recent Experiments Table
+        const tbody = document.getElementById("overview-recent-table");
+        if (!tbody) return;
+
+        const recent = json.recent_experiments || [];
+        if (recent.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="color:var(--text-muted); padding:24px;">No simulations recorded yet. Run a transmission test!</td></tr>`;
+            return;
         }
-    } catch (err) {
-        console.error("Error setting session data:", err);
-        alert("Network error updating session data.");
+
+        tbody.innerHTML = "";
+        recent.forEach(exp => {
+            const tr = document.createElement("tr");
+
+            let resultBadge = "";
+            if (exp.error_type === "clean") {
+                resultBadge = `<span class="badge badge-neutral">Clean Frame</span>`;
+            } else if (exp.error_detected) {
+                resultBadge = `<span class="badge badge-success">Detected</span>`;
+            } else {
+                resultBadge = `<span class="badge badge-danger">Missed</span>`;
+            }
+
+            tr.innerHTML = `
+                <td><code>${exp.id}</code></td>
+                <td><strong>${escapeHtml(exp.technique)}</strong></td>
+                <td>${escapeHtml(formatErrorTypeName(exp.error_type))}</td>
+                <td>${exp.errors_injected} bits</td>
+                <td>${resultBadge}</td>
+                <td><small style="color:var(--text-muted);">${exp.timestamp}</small></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+    } catch (e) {
+        console.error("Failed to load overview stats:", e);
     }
-    return null;
 }
 
-// Modal actions
-function openDataModal() {
-    const modal = document.getElementById("data-modal");
-    const input = document.getElementById("modal-data-input");
-    const fb = document.getElementById("modal-feedback");
-    if (input) input.value = currentSessionData;
-    if (fb) fb.style.display = "none";
-    if (modal) modal.classList.add("active");
+function formatErrorTypeName(type) {
+    const map = {
+        clean: "Clean (0 errors)",
+        single: "Single-Bit Error",
+        multiple: "Multiple-Bit Errors",
+        burst: "Burst Error",
+        consecutive_burst: "Consecutive Burst",
+        multiple_burst: "Multiple Burst",
+        manual: "Manual Injection"
+    };
+    return map[type] || type;
 }
 
-function closeDataModal() {
-    const modal = document.getElementById("data-modal");
-    if (modal) modal.classList.remove("active");
+// ==========================================================================
+// TRANSMISSION SIMULATOR CONTROLLER
+// ==========================================================================
+
+function setSimulatorInputMode(mode) {
+    AppState.simInputMode = mode;
+    const tabBinary = document.getElementById("tab-btn-binary");
+    const tabText = document.getElementById("tab-btn-text");
+    const wrapBinary = document.getElementById("sim-mode-binary-wrap");
+    const wrapText = document.getElementById("sim-mode-text-wrap");
+
+    if (mode === "binary") {
+        if (tabBinary) tabBinary.classList.add("active");
+        if (tabText) tabText.classList.remove("active");
+        if (wrapBinary) wrapBinary.style.display = "block";
+        if (wrapText) wrapText.style.display = "none";
+    } else {
+        if (tabBinary) tabBinary.classList.remove("active");
+        if (tabText) tabText.classList.add("active");
+        if (wrapBinary) wrapBinary.style.display = "none";
+        if (wrapText) wrapText.style.display = "block";
+    }
 }
 
-async function submitDataModal() {
-    const input = document.getElementById("modal-data-input");
+function handleBinaryInputChange() {
+    const input = document.getElementById("sim-data-input");
     if (!input) return;
     const val = input.value.trim();
-    const res = await setSessionData(val);
-    if (res && res.success) {
-        closeDataModal();
+    if (val && /^[01]+$/.test(val)) {
+        AppState.sessionData = val;
+        setGlobalPayload(val);
     }
 }
 
-function setModalRandom() {
-    let bits = "";
-    for (let i = 0; i < 16; i++) bits += Math.random() < 0.5 ? "0" : "1";
-    const input = document.getElementById("modal-data-input");
-    if (input) input.value = bits;
-}
+async function handleTextToBinaryLive() {
+    const textInput = document.getElementById("sim-text-input");
+    const preview = document.getElementById("sim-text-conversion-preview");
+    if (!textInput || !preview) return;
 
-function setModalSample(bits) {
-    const input = document.getElementById("modal-data-input");
-    if (!input) return;
-    if (bits === "8") input.value = "10110011";
-    else if (bits === "16") input.value = "1011011011001100";
-    else if (bits === "32") input.value = "11001010111100001010010111110000";
-}
+    const text = textInput.value;
+    if (!text) {
+        preview.textContent = "Enter text to automatically convert to 8-bit ASCII binary.";
+        return;
+    }
 
-async function generateRandomData() {
-    await setSessionData("r");
-}
-
-async function quickTextPrompt() {
-    const text = prompt("Enter plain ASCII text to convert to binary bits (e.g. 'DCN'):");
-    if (text !== null && text.trim() !== "") {
-        await setSessionData(text.trim());
+    try {
+        const res = await fetch("/api/convert-text", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text })
+        });
+        const json = await res.json();
+        if (json.success) {
+            preview.innerHTML = `<strong>ASCII Binary (${json.length} bits):</strong> <code style="word-break:break-all;">${json.binary}</code>`;
+            // Update active session data with converted text
+            AppState.sessionData = json.binary;
+            const simInput = document.getElementById("sim-data-input");
+            if (simInput) simInput.value = json.binary;
+            setGlobalPayload(json.binary);
+        } else {
+            preview.textContent = json.error || "Conversion failed";
+        }
+    } catch (e) {
+        console.error("Text conversion error:", e);
     }
 }
 
+function generateSimulatorRandom(bits = 16) {
+    let randStr = "";
+    for (let i = 0; i < bits; i++) {
+        randStr += Math.random() < 0.5 ? "0" : "1";
+    }
+    const input = document.getElementById("sim-data-input");
+    if (input) input.value = randStr;
+    setGlobalPayload(randStr);
+}
 
-// ======================================================================
-// TAB 1: SIMULATOR CONTROLLER
-// ======================================================================
-
-function toggleSimTechniqueOptions() {
-    const tech = document.getElementById("sim-technique").value;
+function handleTechSelectionChange() {
+    const select = document.getElementById("sim-tech-select");
     const crcOpts = document.getElementById("sim-crc-options");
     const chkOpts = document.getElementById("sim-checksum-options");
+    const desc = document.getElementById("sim-tech-short-desc");
+    if (!select) return;
 
-    if (crcOpts) crcOpts.style.display = tech === "CRC" ? "block" : "none";
-    if (chkOpts) chkOpts.style.display = tech === "Checksum" ? "block" : "none";
+    const val = select.value;
+    if (crcOpts) crcOpts.style.display = (val === "CRC") ? "block" : "none";
+    if (chkOpts) chkOpts.style.display = (val === "Checksum") ? "block" : "none";
+
+    const descMap = {
+        "VRC / Parity": "Appends a single bit to enforce an even number of '1's. Catches 100% of single-bit errors; misses all even errors.",
+        "LRC": "Divides bitstream into 8-bit blocks and computes column-wise parity check characters.",
+        "Checksum": "Accumulates m-bit words using 1's complement addition with end-around carry and bitwise inversion.",
+        "CRC": "Treats data as polynomial coefficients over GF(2) and appends remainder from modulo-2 generator division."
+    };
+    if (desc) desc.textContent = descMap[val] || "";
 }
 
-function toggleSimErrorInputs() {
-    const errType = document.getElementById("sim-error-type").value;
-    const multi = document.getElementById("err-param-multi");
-    const burst = document.getElementById("err-param-burst");
-    const consecBurst = document.getElementById("err-param-consec-burst");
-    const multiBurst = document.getElementById("err-param-multi-burst");
-    const manual = document.getElementById("err-param-manual");
+function handleErrorSelectionChange() {
+    const select = document.getElementById("sim-error-select");
+    if (!select) return;
 
-    if (multi) multi.style.display = errType === "multiple" ? "block" : "none";
-    if (burst) burst.style.display = errType === "burst" ? "block" : "none";
-    if (consecBurst) consecBurst.style.display = errType === "consecutive_burst" ? "block" : "none";
-    if (multiBurst) multiBurst.style.display = errType === "multiple_burst" ? "block" : "none";
-    if (manual) manual.style.display = errType === "manual" ? "block" : "none";
+    const val = select.value;
+    const hide = id => { const el = document.getElementById(id); if (el) el.style.display = "none"; };
+    const show = id => { const el = document.getElementById(id); if (el) el.style.display = "block"; };
+
+    hide("wrap-multi-count");
+    hide("wrap-burst-span");
+    hide("wrap-consec-span");
+    hide("wrap-multiburst-spec");
+    hide("wrap-manual-spec");
+
+    if (val === "multiple") show("wrap-multi-count");
+    else if (val === "burst") show("wrap-burst-span");
+    else if (val === "consecutive_burst") show("wrap-consec-span");
+    else if (val === "multiple_burst") show("wrap-multiburst-spec");
+    else if (val === "manual") show("wrap-manual-spec");
 }
 
-async function handleSimulate(e) {
-    e.preventDefault();
-    const btn = document.getElementById("btn-run-sim");
-    btn.disabled = true;
-    btn.textContent = "Simulating...";
+async function handleSimulatorSubmit(event) {
+    if (event) event.preventDefault();
 
-    const data = document.getElementById("sim-data").value.trim();
-    const technique = document.getElementById("sim-technique").value;
-    const errorType = document.getElementById("sim-error-type").value;
-    const crcPoly = document.getElementById("sim-crc-poly").value;
-    const chkSize = document.getElementById("sim-chk-size").value;
+    const dataInput = document.getElementById("sim-data-input");
+    const data = (dataInput ? dataInput.value.trim() : "") || AppState.sessionData;
 
-    let errorAmount = 1;
+    if (!data || !/^[01]+$/.test(data)) {
+        alert("Please enter a valid binary payload string consisting only of '0' and '1'.");
+        return;
+    }
+
+    const tech = document.getElementById("sim-tech-select").value;
+    const errType = document.getElementById("sim-error-select").value;
+
+    let errAmount = 1;
     let positions = null;
 
-    if (errorType === "multiple") {
-        errorAmount = parseInt(document.getElementById("sim-multi-count").value, 10) || 2;
-    } else if (errorType === "burst") {
-        errorAmount = parseInt(document.getElementById("sim-burst-len").value, 10) || 4;
-    } else if (errorType === "consecutive_burst") {
-        errorAmount = parseInt(document.getElementById("sim-consec-burst-len").value, 10) || 4;
-    } else if (errorType === "multiple_burst") {
-        const count = parseInt(document.getElementById("sim-multi-burst-count").value, 10) || 2;
-        const bLen = parseInt(document.getElementById("sim-multi-burst-len").value, 10) || 3;
-        errorAmount = [count, bLen];
-    } else if (errorType === "manual") {
-        const rawPos = document.getElementById("sim-manual-indices").value;
-        positions = rawPos.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
-        errorAmount = positions;
+    if (errType === "multiple") {
+        errAmount = parseInt(document.getElementById("sim-param-multi").value, 10) || 2;
+    } else if (errType === "burst") {
+        errAmount = parseInt(document.getElementById("sim-param-burst").value, 10) || 4;
+    } else if (errType === "consecutive_burst") {
+        errAmount = parseInt(document.getElementById("sim-param-consec").value, 10) || 4;
+    } else if (errType === "multiple_burst") {
+        errAmount = {
+            num_bursts: parseInt(document.getElementById("sim-param-mb-count").value, 10) || 2,
+            burst_length: parseInt(document.getElementById("sim-param-mb-len").value, 10) || 3
+        };
+    } else if (errType === "manual") {
+        const rawPos = document.getElementById("sim-param-manual").value;
+        positions = rawPos.split(",").map(p => parseInt(p.trim(), 10)).filter(n => !isNaN(n));
+        errAmount = positions;
+    }
+
+    const crcGen = document.getElementById("sim-crc-poly") ? document.getElementById("sim-crc-poly").value : "100000111";
+    const chkWordSize = document.getElementById("sim-chk-words") ? parseInt(document.getElementById("sim-chk-words").value, 10) : 8;
+
+    const btn = document.getElementById("btn-start-transmission");
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<div class="spinner"></div> Transmitting...`;
     }
 
     try {
@@ -213,177 +390,223 @@ async function handleSimulate(e) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                data,
-                technique,
-                error_type: errorType,
-                error_amount: errorAmount,
-                crc_generator: crcPoly,
-                checksum_word_size: chkSize,
-                positions
+                data: data,
+                technique: tech,
+                error_type: errType,
+                error_amount: errAmount,
+                crc_generator: crcGen,
+                checksum_word_size: chkWordSize,
+                positions: positions
             })
         });
 
-        const dataRes = await res.json();
-        if (dataRes.success) {
-            renderSimulationResult(dataRes.result);
+        const json = await res.json();
+        if (json.success && json.result) {
+            renderSimulatorResults(json.result);
+            loadOverviewStats(); // Update dashboard count
         } else {
-            alert(dataRes.error || "Simulation failed.");
+            alert(json.error || "Simulation failed");
         }
-    } catch (err) {
-        console.error("Simulation request error:", err);
-        alert("Failed to communicate with simulation backend.");
+    } catch (e) {
+        console.error("Simulation request error:", e);
+        alert("An error occurred during transmission simulation.");
     } finally {
-        btn.disabled = false;
-        btn.textContent = "Simulate Transmission Pipeline";
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Start Transmission`;
+        }
     }
 }
 
-function renderSimulationResult(sim) {
-    document.getElementById("sim-empty-state").style.display = "none";
-    const container = document.getElementById("sim-results-container");
-    container.style.display = "block";
+function renderSimulatorResults(sim) {
+    const emptyState = document.getElementById("sim-empty-state");
+    const activeResults = document.getElementById("sim-active-results");
+    if (emptyState) emptyState.style.display = "none";
+    if (activeResults) activeResults.style.display = "block";
 
     // Verdict Badge
-    const badge = document.getElementById("sim-verdict-badge");
-    if (sim.error_type === "clean") {
-        badge.className = "badge badge-success";
-        badge.textContent = "CLEAN TRANSMISSION (VALID)";
-    } else if (sim.error_detected) {
-        badge.className = "badge badge-success";
-        badge.textContent = "ERROR DETECTED (PASSED)";
-    } else {
-        badge.className = "badge badge-danger";
-        badge.textContent = "ERROR MISSED (UNDETECTED)";
+    const verdictPill = document.getElementById("sim-verdict-pill");
+    if (verdictPill) {
+        if (sim.error_type === "clean") {
+            verdictPill.className = "badge badge-neutral";
+            verdictPill.textContent = "Clean Transmission";
+        } else if (sim.error_detected) {
+            verdictPill.className = "badge badge-success";
+            verdictPill.textContent = "Error Detected";
+        } else {
+            verdictPill.className = "badge badge-danger";
+            verdictPill.textContent = "Error Missed (Undetected)";
+        }
     }
 
-    // Stage 1
-    document.getElementById("sim-stage1-meta").textContent =
-        `Overhead: +${sim.overhead_bits} bits (${sim.overhead_percentage.toFixed(1)}%)`;
-    renderBitStream("sim-out-payload", sim.original_data);
-    renderBitStream("sim-out-protected", sim.protected_frame);
-
-    // Stage 2
-    document.getElementById("sim-stage2-meta").textContent =
-        `Errors Injected: ${sim.errors_injected} bit(s)`;
-    renderCorruptedBitStream("sim-out-corrupted", sim.protected_frame, sim.corrupted_frame, sim.flipped_indices);
-
-    const indDiv = document.getElementById("sim-out-indices");
-    if (sim.flipped_indices && sim.flipped_indices.length > 0) {
-        indDiv.textContent = `Corrupted Bit Positions: [${sim.flipped_indices.join(", ")}]`;
-    } else {
-        indDiv.textContent = "Corrupted Bit Positions: None (Clean Frame)";
+    // Stage A: Original Data
+    const origBox = document.getElementById("vis-stream-orig");
+    if (origBox) {
+        origBox.innerHTML = renderBitCells(sim.original_data, [], 0);
     }
+    const metaOrig = document.getElementById("vis-meta-orig");
+    if (metaOrig) metaOrig.textContent = `Payload: ${sim.payload_length} bits`;
 
-    // Physical cause & intro mechanism
-    const causeEl = document.getElementById("sim-out-cause");
+    // Stage B: Encoded Data
+    const encBox = document.getElementById("vis-stream-enc");
+    if (encBox) {
+        encBox.innerHTML = renderBitCells(sim.protected_frame, [], sim.payload_length);
+    }
+    const metaEnc = document.getElementById("vis-meta-enc");
+    if (metaEnc) metaEnc.textContent = `Frame: ${sim.protected_frame.length} bits (+${sim.overhead_bits} check bits)`;
+
+    // Stage C & D: Transmission Channel & Noise
+    const chanBox = document.getElementById("vis-stream-chan");
+    if (chanBox) {
+        chanBox.innerHTML = renderBitCells(sim.corrupted_frame, sim.flipped_indices, sim.payload_length);
+    }
+    const metaChan = document.getElementById("vis-meta-chan");
+    if (metaChan) metaChan.textContent = `${sim.errors_injected} bit(s) flipped at indices: [${sim.flipped_indices.join(", ")}]`;
+
+    const causeEl = document.getElementById("vis-cause-text");
     if (causeEl) causeEl.textContent = sim.error_cause || "None";
-    const mechEl = document.getElementById("sim-out-mechanism");
+
+    const mechEl = document.getElementById("vis-mechanism-text");
     if (mechEl) mechEl.textContent = sim.error_introduction || "None";
 
-    // Stage 3
-    const mpValid = document.getElementById("sim-mp-valid");
-    mpValid.textContent = sim.is_valid ? "Valid (Passed)" : "Corrupted (Failed)";
-    mpValid.style.color = sim.is_valid ? "#166534" : "#991b1b";
-
-    const mpDetected = document.getElementById("sim-mp-detected");
-    if (sim.error_type === "clean") {
-        mpDetected.textContent = "N/A (Clean)";
-        mpDetected.style.color = "#475569";
-    } else {
-        mpDetected.textContent = sim.error_detected ? "Detected (Yes)" : "Missed (No)";
-        mpDetected.style.color = sim.error_detected ? "#166534" : "#991b1b";
+    // Stage E: Receiver Data
+    const recvBox = document.getElementById("vis-stream-recv");
+    if (recvBox) {
+        recvBox.innerHTML = renderBitCells(sim.corrupted_frame, sim.flipped_indices, sim.payload_length);
     }
+    const metaRecv = document.getElementById("vis-meta-recv");
+    if (metaRecv) metaRecv.textContent = `Received Frame: ${sim.corrupted_frame.length} bits`;
 
-    document.getElementById("sim-mp-overhead").textContent =
-        `+${sim.overhead_bits} bits (${sim.overhead_percentage.toFixed(1)}%)`;
-
-    const latUs = (sim.processing_time * 1e6).toFixed(2);
-    document.getElementById("sim-mp-latency").textContent = `${latUs} µs`;
-
-    // Stage 4
-    document.getElementById("sim-out-explanation").textContent = sim.explanation;
-}
-
-function renderBitStream(elementId, bitStr) {
-    const el = document.getElementById(elementId);
-    if (!el) return;
-    el.innerHTML = "";
-    for (let i = 0; i < bitStr.length; i++) {
-        const span = document.createElement("span");
-        span.className = "bit-cell";
-        span.textContent = bitStr[i];
-        el.appendChild(span);
+    // Stage F: Verdict & Explanation
+    const verdictTitle = document.getElementById("vis-verdict-title");
+    const explText = document.getElementById("vis-explanation-text");
+    if (verdictTitle) {
+        if (sim.error_type === "clean") {
+            verdictTitle.innerHTML = `<span style="color:var(--primary);">[INTEGRITY VERIFIED]</span> No channel noise detected.`;
+        } else if (sim.error_detected) {
+            verdictTitle.innerHTML = `<span style="color:var(--status-success-text);">[ERROR DETECTED]</span> Receiver integrity verification failed as expected.`;
+        } else {
+            verdictTitle.innerHTML = `<span style="color:var(--status-error-text);">[ERROR MISSED]</span> Transmission was corrupted but escaped receiver detection!`;
+        }
     }
-}
+    if (explText) explText.textContent = sim.explanation;
 
-function renderCorruptedBitStream(elementId, origStr, corrStr, flippedIndices) {
-    const el = document.getElementById(elementId);
-    if (!el) return;
-    el.innerHTML = "";
-    const flipSet = new Set(flippedIndices || []);
-    for (let i = 0; i < corrStr.length; i++) {
-        const span = document.createElement("span");
-        span.className = flipSet.has(i) ? "bit-cell flipped" : "bit-cell";
-        span.textContent = corrStr[i];
-        span.title = `Bit #${i}${flipSet.has(i) ? ' (FLIPPED)' : ''}`;
-        el.appendChild(span);
+    // Results Metrics Grid
+    const valPayload = document.getElementById("res-val-payload");
+    const valFrame = document.getElementById("res-val-frame");
+    const valOverBits = document.getElementById("res-val-overhead-bits");
+    const valOverPct = document.getElementById("res-val-overhead-pct");
+    const valLatency = document.getElementById("res-val-latency");
+    const valStatus = document.getElementById("res-val-status");
+
+    if (valPayload) valPayload.textContent = `${sim.payload_length} bits`;
+    if (valFrame) valFrame.textContent = `${sim.protected_frame.length} bits`;
+    if (valOverBits) valOverBits.textContent = `+${sim.overhead_bits} bits`;
+    if (valOverPct) valOverPct.textContent = `${Number(sim.overhead_percentage).toFixed(1)}%`;
+    if (valLatency) valLatency.textContent = `${(sim.processing_time * 1e6).toFixed(2)} µs`;
+    if (valStatus) {
+        valStatus.textContent = sim.is_valid ? "Valid (Accepted)" : "Corrupted (Rejected)";
+        valStatus.style.color = sim.is_valid ? "var(--status-success-text)" : "var(--status-error-text)";
     }
 }
 
+function renderBitCells(bitstring, flippedIndices = [], redundancyStartIndex = 0) {
+    const flipSet = new Set(flippedIndices);
+    let html = "";
+    for (let i = 0; i < bitstring.length; i++) {
+        const bit = bitstring[i];
+        let cls = "bit-cell";
+        let title = `Bit index ${i}: ${bit}`;
 
-// ======================================================================
-// TAB 2: COMPARE TECHNIQUES CONTROLLER
-// ======================================================================
+        if (flipSet.has(i)) {
+            cls += " flipped";
+            title += " (CORRUPTED IN TRANSMISSION)";
+        } else if (redundancyStartIndex > 0 && i >= redundancyStartIndex) {
+            cls += " redundancy";
+            title += " (REDUNDANT CHECK BIT)";
+        } else {
+            cls += " original";
+        }
 
-function toggleCompErrorInputs() {
-    const errType = document.getElementById("comp-error-type").value;
+        html += `<span class="${cls}" title="${title}">${bit}</span>`;
+    }
+    return html;
+}
+
+function resetSimulatorView() {
+    const simInput = document.getElementById("sim-data-input");
+    if (simInput) simInput.focus();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// ==========================================================================
+// ERROR DETECTION PAGE CONTROLLER
+// ==========================================================================
+
+async function loadTraceForAlgo(tech) {
+    AppState.currentTraceAlgo = tech;
+    const titleEl = document.getElementById("algo-trace-title");
+    const contentEl = document.getElementById("algo-trace-content");
+    if (contentEl) contentEl.textContent = "Calculating step-by-step mathematical trace from backend...";
+
+    const titleMap = {
+        vrc: "VRC / Parity Check Step-by-Step Calculation",
+        lrc: "LRC Matrix Step-by-Step Calculation",
+        checksum: "Internet Checksum 1's Complement Step-by-Step Calculation",
+        crc: "CRC Modulo-2 Polynomial Division Working",
+        all: "All Four Error Detection Techniques Calculations"
+    };
+    if (titleEl) titleEl.textContent = titleMap[tech] || "Algorithm Working Trace";
+
+    try {
+        const res = await fetch(`/api/algorithm-working?technique=${tech}&data=${AppState.sessionData}`);
+        const json = await res.json();
+        if (json.success && json.traces) {
+            let combinedText = "";
+            for (const [key, trace] of Object.entries(json.traces)) {
+                combinedText += `\n${trace.raw_text}\n\n`;
+            }
+            if (contentEl) contentEl.textContent = combinedText.trim();
+        } else {
+            if (contentEl) contentEl.textContent = json.error || "Failed to load algorithm trace.";
+        }
+    } catch (e) {
+        console.error("Trace load error:", e);
+        if (contentEl) contentEl.textContent = "Error loading calculation working.";
+    }
+}
+
+// ==========================================================================
+// ALGORITHM COMPARISON CONTROLLER
+// ==========================================================================
+
+function handleCompErrorChange() {
+    const select = document.getElementById("comp-err-type");
     const amountCol = document.getElementById("comp-amount-col");
-    const multiCol = document.getElementById("comp-multi-col");
-    const manualCol = document.getElementById("comp-manual-col");
     const label = document.getElementById("comp-amount-label");
+    if (!select || !amountCol) return;
 
-    if (errType === "clean" || errType === "single") {
-        if (amountCol) amountCol.style.display = "none";
-        if (multiCol) multiCol.style.display = "none";
-        if (manualCol) manualCol.style.display = "none";
-    } else if (errType === "multiple") {
-        if (amountCol) amountCol.style.display = "block";
-        if (multiCol) multiCol.style.display = "none";
-        if (manualCol) manualCol.style.display = "none";
-        if (label) label.textContent = "Error Bit Count:";
-    } else if (errType === "burst") {
-        if (amountCol) amountCol.style.display = "block";
-        if (multiCol) multiCol.style.display = "none";
-        if (manualCol) manualCol.style.display = "none";
-        if (label) label.textContent = "Burst Span (bits):";
-    } else if (errType === "consecutive_burst") {
-        if (amountCol) amountCol.style.display = "block";
-        if (multiCol) multiCol.style.display = "none";
-        if (manualCol) manualCol.style.display = "none";
-        if (label) label.textContent = "Consecutive Span (bits):";
-    } else if (errType === "multiple_burst") {
-        if (amountCol) amountCol.style.display = "none";
-        if (multiCol) multiCol.style.display = "block";
-        if (manualCol) manualCol.style.display = "none";
-    } else if (errType === "manual") {
-        if (amountCol) amountCol.style.display = "none";
-        if (multiCol) multiCol.style.display = "none";
-        if (manualCol) manualCol.style.display = "block";
+    const val = select.value;
+    if (val === "clean" || val === "single") {
+        amountCol.style.display = "none";
+    } else {
+        amountCol.style.display = "block";
+        if (val === "burst" || val === "consecutive_burst") {
+            if (label) label.textContent = "Burst Span (bits):";
+        } else {
+            if (label) label.textContent = "Bit Error Count:";
+        }
     }
 }
 
-async function handleRunComparison() {
-    const errType = document.getElementById("comp-error-type").value;
-    let errorAmount = 1;
+async function executeComparison() {
+    const data = AppState.sessionData;
+    const errType = document.getElementById("comp-err-type").value;
+    const errAmount = parseInt(document.getElementById("comp-err-amount").value, 10) || 2;
 
-    if (errType === "multiple" || errType === "burst" || errType === "consecutive_burst") {
-        errorAmount = parseInt(document.getElementById("comp-error-amount").value, 10) || 2;
-    } else if (errType === "multiple_burst") {
-        const c = parseInt(document.getElementById("comp-multi-burst-count")?.value, 10) || 2;
-        const l = parseInt(document.getElementById("comp-multi-burst-len")?.value, 10) || 3;
-        errorAmount = [c, l];
-    } else if (errType === "manual") {
-        errorAmount = document.getElementById("comp-manual-positions").value.trim() || "0";
+    const tbody = document.getElementById("comp-results-tbody");
+    if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center"><div class="spinner"></div> Executing synchronized comparison across 4 techniques...</td></tr>`;
     }
 
     try {
@@ -391,234 +614,73 @@ async function handleRunComparison() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                data: currentSessionData,
+                data: data,
                 error_type: errType,
-                error_amount: errorAmount
+                error_amount: errAmount
             })
         });
 
-        const data = await res.json();
-        if (data.success) {
-            renderComparisonResults(data.results);
+        const json = await res.json();
+        if (json.success && json.results) {
+            renderComparisonTable(json.results);
         } else {
-            alert(data.error || "Comparison failed.");
+            if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="color:var(--status-error-text);">${json.error || "Comparison failed"}</td></tr>`;
         }
-    } catch (err) {
-        console.error("Comparison error:", err);
-        alert("Failed to communicate with comparison backend.");
+    } catch (e) {
+        console.error("Comparison execution failed:", e);
     }
 }
 
-function renderComparisonResults(results) {
-    document.getElementById("comp-empty").style.display = "none";
-    document.getElementById("comp-table-wrapper").style.display = "block";
-
-    const tbody = document.getElementById("comp-table-body");
-    const cardsGrid = document.getElementById("comp-explanations-grid");
+function renderComparisonTable(results) {
+    const tbody = document.getElementById("comp-results-tbody");
+    if (!tbody) return;
     tbody.innerHTML = "";
-    cardsGrid.innerHTML = "";
 
-    results.forEach(res => {
-        // Table row
+    results.forEach(item => {
         const tr = document.createElement("tr");
 
-        const tdTech = document.createElement("td");
-        tdTech.innerHTML = `<strong>${res.technique}</strong>`;
-
-        const tdOverhead = document.createElement("td");
-        tdOverhead.textContent = `+${res.overhead_bits} bits (${res.overhead_percentage.toFixed(1)}%)`;
-
-        const tdTime = document.createElement("td");
-        const timeUs = (res.processing_time * 1e6).toFixed(2);
-        tdTime.textContent = `${timeUs} µs`;
-
-        const tdPositions = document.createElement("td");
-        tdPositions.textContent = (res.flipped_indices && res.flipped_indices.length > 0)
-            ? `[${res.flipped_indices.join(", ")}]`
-            : "None";
-
-        const tdStatus = document.createElement("td");
-        if (res.error_type === "clean") {
-            tdStatus.innerHTML = '<span class="badge badge-neutral">Clean Frame</span>';
-        } else if (res.error_detected) {
-            tdStatus.innerHTML = '<span class="badge badge-success">Detected</span>';
+        let statusBadge = "";
+        if (item.error_type === "clean") {
+            statusBadge = `<span class="badge badge-neutral">Clean Frame</span>`;
+        } else if (item.error_detected) {
+            statusBadge = `<span class="badge badge-success">Detected</span>`;
         } else {
-            tdStatus.innerHTML = '<span class="badge badge-danger">Missed</span>';
+            statusBadge = `<span class="badge badge-danger">Missed</span>`;
         }
 
-        const tdVerdict = document.createElement("td");
-        if (res.error_type === "clean") {
-            tdVerdict.innerHTML = '<span style="color:#166534;font-weight:600;">[VALID]</span>';
-        } else if (res.error_detected) {
-            tdVerdict.innerHTML = '<span style="color:#166534;font-weight:600;">[DETECTED]</span>';
-        } else {
-            tdVerdict.innerHTML = '<span style="color:#991b1b;font-weight:600;">[MISSED]</span>';
-        }
+        const verdictStr = item.is_valid
+            ? `<span style="color:var(--status-success-text); font-weight:700;">[VALID]</span>`
+            : `<span style="color:var(--status-error-text); font-weight:700;">[CORRUPTED]</span>`;
 
-        tr.appendChild(tdTech);
-        tr.appendChild(tdOverhead);
-        tr.appendChild(tdTime);
-        tr.appendChild(tdPositions);
-        tr.appendChild(tdStatus);
-        tr.appendChild(tdVerdict);
+        tr.innerHTML = `
+            <td><strong>${escapeHtml(item.technique)}</strong></td>
+            <td>+${item.overhead_bits} bits (${Number(item.overhead_percentage).toFixed(1)}%)</td>
+            <td>${(item.processing_time * 1e6).toFixed(2)} µs</td>
+            <td><code>[${(item.flipped_indices || []).join(", ")}]</code></td>
+            <td>${statusBadge}</td>
+            <td>${verdictStr}</td>
+        `;
         tbody.appendChild(tr);
-
-        // Explanation Card
-        const card = document.createElement("div");
-        card.className = "comp-card";
-        card.innerHTML = `
-            <div class="comp-card-title">
-                <span>${res.technique}</span>
-                <span class="badge ${res.error_detected ? 'badge-success' : (res.error_type === 'clean' ? 'badge-neutral' : 'badge-danger')}">
-                    ${res.error_type === 'clean' ? 'Clean' : (res.error_detected ? 'Detected' : 'Missed')}
-                </span>
-            </div>
-            <div class="comp-card-body">
-                <p>${res.explanation}</p>
-            </div>
-        `;
-        cardsGrid.appendChild(card);
     });
 }
 
+// ==========================================================================
+// EXPERIMENTAL ANALYSIS CONTROLLER
+// ==========================================================================
 
-// ======================================================================
-// TAB 3: ALGORITHM WORKING CONTROLLER
-// ======================================================================
-
-async function loadAlgorithmTrace(tech, btnEl) {
-    activeAlgoTab = tech;
-    if (btnEl) {
-        document.querySelectorAll(".algo-nav-btns .btn").forEach(b => b.classList.remove("active"));
-        btnEl.classList.add("active");
-    }
-
-    const container = document.getElementById("algo-traces-container");
-    container.innerHTML = '<div class="loading-state"><div class="spinner"></div> Generating algorithm traces from backend...</div>';
-
-    const crcPoly = document.getElementById("algo-crc-gen").value;
-    const chkSize = document.getElementById("algo-chk-size").value;
-
-    try {
-        const url = `/api/algorithm-working?data=${encodeURIComponent(currentSessionData)}&technique=${tech}&crc_generator=${crcPoly}&checksum_word_size=${chkSize}`;
-        const res = await fetch(url);
-        const data = await res.json();
-
-        if (data.success) {
-            renderAlgorithmTraces(data.traces);
-        } else {
-            container.innerHTML = `<div class="alert alert-warning">${data.error || 'Failed to generate calculations.'}</div>`;
-        }
-    } catch (err) {
-        console.error("Algorithm working fetch error:", err);
-        container.innerHTML = '<div class="alert alert-warning">Network error communicating with backend calculation engine.</div>';
-    }
-}
-
-function refreshAlgorithmTrace() {
-    loadAlgorithmTrace(activeAlgoTab);
-}
-
-function renderAlgorithmTraces(traces) {
-    const container = document.getElementById("algo-traces-container");
-    container.innerHTML = "";
-
-    const keys = Object.keys(traces);
-    if (keys.length === 0) {
-        container.innerHTML = '<div class="empty-state">No algorithm traces available.</div>';
-        return;
-    }
-
-    keys.forEach(k => {
-        const trace = traces[k];
-        const box = document.createElement("div");
-        box.className = "trace-box";
-        box.innerHTML = `
-            <div class="trace-header">
-                <span class="trace-title">${trace.name}</span>
-                <span class="badge badge-accent">Native Backend Calculation</span>
-            </div>
-            <div class="trace-content">${escapeHtml(trace.raw_text)}</div>
-        `;
-        container.appendChild(box);
-    });
-}
-
-function escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-
-// ======================================================================
-// TAB 4: EXPERIMENTS & ANALYTICAL GRAPHS CONTROLLER
-// ======================================================================
-
-function initExperimentsTab() {
-    // Initial status check
-    checkExperimentStatus();
-}
-
-function checkExperimentStatus() {
-    // Keep baseline ready
-}
-
-function updateBaselineUI(baseline) {
-    const badge = document.getElementById("baseline-status-badge");
-    const lastMod = document.getElementById("baseline-last-mod");
-
-    if (badge && baseline) {
-        if (baseline.baseline_ready) {
-            badge.className = "badge badge-success";
-            badge.textContent = "Baseline Available";
-        } else {
-            badge.className = "badge badge-warning";
-            badge.textContent = "Benchmark Not Run Yet";
-        }
-    }
-
-    if (lastMod && baseline) {
-        lastMod.textContent = baseline.last_modified || "Never";
-    }
-}
-
-function updateStagingBanner(hasStaged, stagedRun) {
-    const banner = document.getElementById("staging-banner");
-    const msg = document.getElementById("staging-msg");
-    if (!banner) return;
-
-    if (hasStaged && stagedRun) {
-        banner.style.display = "flex";
-        if (msg) msg.textContent = `New experiment results generated (${stagedRun.total_trials} trials in ${stagedRun.elapsed_seconds}s).`;
-        refreshCharts("staged");
-    } else {
-        banner.style.display = "none";
-    }
-}
-
-async function handleRunExperiments(e) {
-    if (e && e.preventDefault) e.preventDefault();
-
-    const confirmed = confirm(
-        "Are you sure you want to run the empirical benchmarks with these settings?\n\nThis will execute trials across all 4 techniques and update the Analytical Performance Visualizations and Aggregated Performance Metrics."
-    );
-    if (!confirmed) {
-        return;
-    }
-
-    const btn = document.getElementById("btn-run-exp");
-    const progress = document.getElementById("exp-progress");
+async function runBenchmarkSweep() {
+    const btn = document.getElementById("btn-run-benchmark");
+    const progress = document.getElementById("exp-progress-box");
     const progressText = document.getElementById("exp-progress-text");
 
-    if (btn) btn.disabled = true;
-    if (progress) progress.style.display = "block";
-    if (progressText) progressText.textContent = "Executing benchmark suite across all 4 techniques... Please wait.";
+    const sizes = document.getElementById("exp-sizes").value;
+    const mags = document.getElementById("exp-mags").value;
+    const bursts = document.getElementById("exp-bursts").value;
+    const trials = parseInt(document.getElementById("exp-trials").value, 10) || 1000;
 
-    const sizes = document.getElementById("exp-sizes")?.value || "32, 64, 128, 256, 512";
-    const mags = document.getElementById("exp-mags")?.value || "1, 2, 3, 4, 5, 8";
-    const bursts = document.getElementById("exp-bursts")?.value || "2, 4, 8, 16";
-    const trials = parseInt(document.getElementById("exp-trials")?.value, 10) || 50;
+    if (btn) btn.disabled = true;
+    if (progress) progress.style.display = "flex";
+    if (progressText) progressText.textContent = `Running ${trials} Monte Carlo trials per configuration across all 4 algorithms...`;
 
     try {
         const res = await fetch("/api/experiments/run", {
@@ -632,176 +694,166 @@ async function handleRunExperiments(e) {
             })
         });
 
-        if (!res.ok) {
-            let errorMsg = `Server error (${res.status})`;
-            try {
-                const errData = await res.json();
-                if (errData && errData.error) errorMsg = errData.error;
-            } catch (_) {}
-            alert("Benchmark run failed: " + errorMsg);
-            if (progress) progress.style.display = "none";
-            return;
-        }
-
-        const data = await res.json();
-        if (data.success) {
-            if (progressText) progressText.textContent = "Reloading analytical visualizations and metrics...";
-
-            if (progress) progress.style.display = "none";
-
-            // Update Analytical Performance Visualizations (all 4 charts)
-            refreshCharts("baseline");
-
-            // Update Aggregated Performance Metrics table
-            await loadMetricsTable("baseline");
-
-            // Smoothly scroll down to the updated visualizations
-            const chartsCard = document.getElementById("charts-card");
-            if (chartsCard) {
-                chartsCard.scrollIntoView({ behavior: "smooth" });
-            }
+        const json = await res.json();
+        if (json.success) {
+            // Apply staged results directly
+            await fetch("/api/experiments/apply", { method: "POST" });
+            refreshCharts();
+            loadMetricsTable();
+            alert("Benchmark experiments successfully completed and analytical graphs updated!");
         } else {
-            alert(data.error || "Benchmark run failed.");
-            if (progress) progress.style.display = "none";
+            alert(json.error || "Benchmark sweep failed.");
         }
-    } catch (err) {
-        console.error("Experiment run error:", err);
-        alert("Failed to execute benchmark run: " + (err.message || err));
-        if (progress) progress.style.display = "none";
+    } catch (e) {
+        console.error("Benchmark sweep failed:", e);
+        alert("Failed to execute benchmark sweep.");
     } finally {
         if (btn) btn.disabled = false;
+        if (progress) progress.style.display = "none";
     }
 }
 
-async function applyStagedExperiments() {
-    try {
-        const res = await fetch("/api/experiments/apply", { method: "POST" });
-        const data = await res.json();
-        if (data.success) {
-            alert("Results and analytical graphs have been successfully applied to the project baseline!");
-            checkExperimentStatus();
-            refreshCharts("baseline");
-            loadMetricsTable("baseline");
-        } else {
-            alert(data.error || "Failed to apply results.");
-        }
-    } catch (err) {
-        console.error("Apply experiments error:", err);
-        alert("Failed to apply staged results.");
-    }
-}
-
-async function discardStagedExperiments() {
-    try {
-        const res = await fetch("/api/experiments/discard", { method: "POST" });
-        const data = await res.json();
-        if (data.success) {
-            alert("Newly generated results discarded. Previous baseline results and graphs preserved.");
-            checkExperimentStatus();
-            refreshCharts("baseline");
-            loadMetricsTable("baseline");
-        } else {
-            alert(data.error || "Failed to discard results.");
-        }
-    } catch (err) {
-        console.error("Discard experiments error:", err);
-        alert("Failed to discard staged results.");
-    }
-}
-
-function refreshCharts(source = "auto") {
-    const timestamp = Date.now();
-    const charts = [
-        { id: "img-chart1", file: "detection_rate_by_error_type.png" },
-        { id: "img-chart2", file: "detection_rate_vs_error_magnitude.png" },
-        { id: "img-chart3", file: "processing_time_vs_data_size.png" },
-        { id: "img-chart4", file: "overhead_vs_data_size.png" }
-    ];
-
-    charts.forEach(c => {
-        const img = document.getElementById(c.id);
+function refreshCharts() {
+    const ts = new Date().getTime();
+    for (let i = 1; i <= 4; i++) {
+        const img = document.getElementById(`img-chart${i}`);
         if (img) {
-            img.src = `/api/graphs/${c.file}?source=${source}&t=${timestamp}`;
+            const currentSrc = img.src.split("?")[0];
+            img.src = `${currentSrc}?t=${ts}`;
         }
-    });
-}
-
-function handleChartError(imgEl) {
-    imgEl.alt = "Chart not generated yet. Please run experiments.";
-    imgEl.style.opacity = "0.5";
-}
-
-async function loadMetricsTable(source = "auto") {
-    try {
-        const res = await fetch(`/api/metrics?source=${source}`);
-        const data = await res.json();
-        if (data.success) {
-            allMetricsRecords = data.records;
-            renderMetricsTable(allMetricsRecords);
-        } else {
-            const tbody = document.getElementById("metrics-table-body");
-            if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center">${data.error}</td></tr>`;
-        }
-    } catch (err) {
-        console.error("Metrics load error:", err);
     }
 }
 
-function renderMetricsTable(records) {
+async function loadMetricsTable() {
+    try {
+        const res = await fetch("/api/metrics");
+        const json = await res.json();
+        if (json.success && json.rows) {
+            AppState.metricsData = json.rows;
+            renderMetricsTableRows(json.rows);
+        }
+    } catch (e) {
+        console.error("Failed to load metrics table:", e);
+    }
+}
+
+function renderMetricsTableRows(rows) {
     const tbody = document.getElementById("metrics-table-body");
-    const countEl = document.getElementById("metrics-row-count");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    if (countEl) countEl.textContent = `Showing ${records.length} configuration rows`;
-
-    if (records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center">No matching metrics.</td></tr>';
+    if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center" style="padding:24px;">No metrics found. Run benchmark experiments to populate.</td></tr>`;
         return;
     }
 
-    records.forEach(r => {
+    // Limit to top 50 for smooth rendering
+    const displayRows = rows.slice(0, 60);
+
+    displayRows.forEach(r => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-            <td><strong>${r.technique}</strong></td>
-            <td>${r.error_type}</td>
+            <td><strong>${escapeHtml(r.technique)}</strong></td>
+            <td>${escapeHtml(r.error_type)}</td>
             <td>${r.data_size} bits</td>
             <td>${r.error_amount}</td>
-            <td>${r.trials}</td>
+            <td>${r.total_trials}</td>
             <td><strong>${r.detection_rate}%</strong></td>
-            <td>${r.latency_us} µs</td>
-            <td>${r.overhead_pct}%</td>
+            <td>${r.average_processing_time_us} µs</td>
+            <td>${r.average_overhead_percentage}%</td>
         `;
         tbody.appendChild(tr);
     });
 }
 
 function filterMetricsTable() {
-    const query = document.getElementById("metrics-search").value.toLowerCase().trim();
-    if (!query) {
-        renderMetricsTable(allMetricsRecords);
+    const q = (document.getElementById("metrics-search-input").value || "").toLowerCase().trim();
+    if (!q) {
+        renderMetricsTableRows(AppState.metricsData);
         return;
     }
-    const filtered = allMetricsRecords.filter(r =>
-        (r.technique && r.technique.toLowerCase().includes(query)) ||
-        (r.error_type && r.error_type.toLowerCase().includes(query))
+    const filtered = AppState.metricsData.filter(r => 
+        (r.technique || "").toLowerCase().includes(q) ||
+        (r.error_type || "").toLowerCase().includes(q) ||
+        String(r.data_size).includes(q)
     );
-    renderMetricsTable(filtered);
+    renderMetricsTableRows(filtered);
 }
 
-// Graph Modal Zoom
-function openGraphModal(filename) {
+// ==========================================================================
+// MODALS
+// ==========================================================================
+
+function openDataModal() {
+    const input = document.getElementById("modal-data-input");
+    const feedback = document.getElementById("modal-feedback");
+    if (input) input.value = AppState.sessionData;
+    if (feedback) feedback.style.display = "none";
+    document.getElementById("data-modal").classList.add("active");
+}
+
+function closeDataModal() {
+    document.getElementById("data-modal").classList.remove("active");
+}
+
+function setModalRandom(bits = 16) {
+    let rand = "";
+    for (let i = 0; i < bits; i++) rand += Math.random() < 0.5 ? "0" : "1";
+    document.getElementById("modal-data-input").value = rand;
+}
+
+function setModalSample(type) {
+    document.getElementById("modal-data-input").value = "NET";
+}
+
+async function submitDataModal() {
+    const input = document.getElementById("modal-data-input");
+    const feedback = document.getElementById("modal-feedback");
+    const raw = (input ? input.value.trim() : "");
+
+    try {
+        const res = await fetch("/api/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: raw })
+        });
+        const json = await res.json();
+        if (json.success) {
+            setGlobalPayload(json.data);
+            closeDataModal();
+        } else {
+            if (feedback) {
+                feedback.textContent = json.message || "Failed to update payload.";
+                feedback.style.color = "var(--status-error-text)";
+                feedback.style.display = "block";
+            }
+        }
+    } catch (e) {
+        console.error("Payload update error:", e);
+    }
+}
+
+function openGraphModal(filename, title) {
     const modal = document.getElementById("graph-modal");
     const img = document.getElementById("modal-graph-img");
-    const title = document.getElementById("modal-graph-title");
-    if (!modal || !img) return;
-
-    img.src = `/api/graphs/${filename}?t=${Date.now()}`;
-    if (title) title.textContent = filename.replace(".png", "").replace(/_/g, " ").toUpperCase();
-    modal.classList.add("active");
+    const titleEl = document.getElementById("modal-graph-title");
+    if (img) img.src = `/api/graphs/${filename}?t=${new Date().getTime()}`;
+    if (titleEl) titleEl.textContent = title;
+    if (modal) modal.classList.add("active");
 }
 
 function closeGraphModal() {
     const modal = document.getElementById("graph-modal");
     if (modal) modal.classList.remove("active");
+}
+
+// Helper: Escape HTML
+function escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }

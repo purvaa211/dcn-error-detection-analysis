@@ -1,156 +1,176 @@
-# Data Communication & Computer Networks (DCN) Course Project
-## Error Generation, Detection, and Comparative Performance Analysis System
+# Network Error Generation and Detection Analysis System
+## Data Communication and Networking (DCN) Engineering Simulation & Analysis Suite
 
-**Author:** Purva  
 **Subject:** Data Communication and Computer Networks (DCN)  
-**IDE:** Visual Studio Code (VS Code)  
-**Language:** Python 3.10+ (Libraries: `matplotlib`, `pandas`, `numpy`)
+**Implementation:** Python 3.10+ (Flask, NumPy, Pandas, Matplotlib)  
+**Visual Identity:** Warm Ivory + Forest Green Engineering Workbench  
+**Repository:** [https://github.com/purvaa211/dcn-error-detection-analysis](https://github.com/purvaa211/dcn-error-detection-analysis)
 
 ---
 
-## 1. Project Overview
+## 1. Project Overview & Core Objective
 
-In computer networks, physical transmission media are inherently susceptible to electromagnetic interference, attenuation, and noise. These impairments cause bit inversions during transmission.
+In computer networking, physical transmission media (copper pairs, optical links, wireless RF channels) are subject to thermal noise, electromagnetic interference, crosstalk, and attenuation. These physical channel impairments cause bit inversions during transmission.
 
-This project implements a complete, structured **Data Link Layer Error Control Architecture** featuring:
-1. **Interactive Transmitter-Channel-Receiver Pipeline:** Demonstrates end-to-end data framing, redundancy bit computation, channel error injection, and receiver integrity validation.
-2. **Four Detection Techniques:**
-   - **VRC / Parity (Vertical Redundancy Check):** Appends 1 parity bit per data unit to achieve even parity ($d_{min} = 2$).
-   - **LRC (Longitudinal Redundancy Check):** Organizes data into blocks and computes column-by-column parity bits.
-   - **Checksum (1's Complement):** Computes 1's complement sum with end-around carry (defaults to 8-bit words; 16-bit word mode follows RFC 1071 as used in TCP/IP).
-   - **CRC (Cyclic Redundancy Check):** Modulo-2 binary polynomial division ($GF(2)$ XOR arithmetic) using the standard CRC-8 generator polynomial ($x^8 + x^2 + x + 1$).
-3. **Five Error Generation Models:**
-   - Clean transmission (zero error introduced)
-   - Single-bit error (random isolated bit flip)
-   - Multiple-bit error (user-specified $k$ bit flips)
-   - Burst error (contiguous span of noise with corrupted endpoints)
-   - Manual error injection (user selects exact bit positions to flip)
-4. **Four Analytical Visualizations:**
-   - Detection rate by error type and technique (Grouped bar chart)
-   - Detection rate versus error magnitude (Multi-bit curve highlighting parity limitation)
-   - Processing time versus data size (Computational latency benchmark in $\mu s$)
-   - Transmission overhead versus data size (Redundancy percentage trade-off)
+The **Network Error Generation and Detection Analysis System** is an interactive engineering simulator and research workbench designed to:
+1. **Simulate end-to-end data transmission** across an unreliable communication channel connecting a Sender, Physical Channel, and Receiver.
+2. **Model realistic transmission errors** including stochastic thermal noise, burst errors, solid contiguous disturbance, and multi-burst episodes.
+3. **Evaluate canonical error detection techniques** across the Data Link and Transport layers (Parity Check / VRC, LRC, 1's Complement Checksum, and CRC).
+4. **Conduct rigorous experimental analysis** through Monte Carlo trials, calculating empirical detection rates, Wilson confidence intervals, computational latency, and bandwidth overhead tradeoffs.
 
 ---
 
-## 2. Project Directory Structure
+## 2. System Architecture & Object-Oriented Design (OOP)
+
+The internal software architecture is structured around networking components and software engineering design patterns:
 
 ```
-error_detection_project/
+dcn-error-detection-analysis/
 │
-├── algorithms/                    # Error Detection Algorithms
-│   ├── parity.py                  # VRC / Parity (Vertical Redundancy Check)
-│   ├── lrc.py                     # LRC (Longitudinal Redundancy Check)
-│   ├── checksum.py                # 1's Complement Checksum (8-bit default, 16-bit RFC 1071)
-│   ├── crc.py                     # Cyclic Redundancy Check (CRC-8, Modulo-2 division)
-│   └── two_dim_parity.py          # 2D Matrix Parity helper
+├── core/                               # Object-Oriented Architecture Package
+│   ├── detection.py                    # ErrorDetection (ABC), ParityCheck, LRC, Checksum, CRC
+│   ├── channel.py                      # TransmissionChannel & noise etiology modeling
+│   ├── networking.py                   # Sender, Receiver, and NetworkSimulator orchestrator
+│   ├── analysis.py                     # ExperimentConfig, ExperimentResult, ExperimentAnalyzer
+│   ├── history.py                      # HistoryManager (JSON-based persistence)
+│   └── __init__.py                     # Clean package exports
 │
-├── simulation/                    # Transmission & Noise Simulation
-│   ├── error_generator.py         # 5 Error models: Clean, Single, Multiple, Burst, Manual
-│   └── simulator.py               # End-to-end pipeline & synchronized multi-technique comparison
+├── algorithms/                         # Core Algorithm Implementations
+│   ├── parity.py                       # VRC / Parity (Even Parity - 1 bit, d_min = 2)
+│   ├── lrc.py                          # LRC (2D Block Parity - 8-bit Block Check Character)
+│   ├── checksum.py                     # 1's Complement Checksum (8-bit default, 16-bit RFC 1071)
+│   ├── crc.py                          # CRC Modulo-2 Polynomial Division (CRC-8, CRC-16, CRC-32)
+│   └── two_dim_parity.py               # 2D Matrix Parity helper
 │
-├── experiments/                   # Empirical Benchmarking Suite
-│   ├── experiment_runner.py       # Monte Carlo empirical trials
-│   └── metrics.py                 # Statistical aggregation (clean separate from corrupted)
+├── simulation/                         # Transmission & Noise Simulation
+│   ├── error_generator.py              # 7 Error models (Clean, Single, Multiple, Burst, Consecutive, Multi-burst, Manual)
+│   └── simulator.py                    # Backward-compatible bridge delegating to core.NetworkSimulator
 │
-├── visualization/                 # The 4 Analytical Visualizations
-│   ├── plot_results.py            # High-resolution (300 DPI) plotting engine
+├── experiments/                        # Empirical Benchmarking Suite
+│   ├── experiment_runner.py            # Monte Carlo trials runner (default: 1,000 trials per config)
+│   └── metrics.py                      # Statistical aggregation & clean vs corrupted separation
+│
+├── visualization/                      # Analytical Visualizations
+│   ├── plot_results.py                 # High-resolution (300 DPI) plotting suite with Warm Ivory / Forest Green theme
 │   ├── detection_rate_by_error_type.png       # Graph 1: Detection Rate by Error Type & Technique
 │   ├── detection_rate_vs_error_magnitude.png  # Graph 2: Detection Rate vs Error Magnitude
-│   ├── processing_time_vs_data_size.png       # Graph 3: Processing Time vs Data Size
+│   ├── processing_time_vs_data_size.png       # Graph 3: Computational Latency vs Data Size
 │   └── overhead_vs_data_size.png              # Graph 4: Transmission Overhead vs Data Size
 │
-├── experiment_results.csv         # Raw experimental Monte Carlo trials
-├── metrics_results.csv            # Aggregated statistical performance indicators
-├── main.py                        # Interactive console CLI with exactly 5 main menu options
-└── README.md                      # Project manual, architecture & viva guide
+├── web/                                # Web Application Interface
+│   ├── app.py                          # Flask application controller & API routes
+│   ├── templates/                      # Jinja2 templates (index.html with sidebar layout)
+│   └── static/                         # Static assets (css/style.css, js/app.js)
+│
+├── web_integration/                    # Adapter & Staging Services
+│   ├── adapter.py                      # Bridge between Web API and Python core
+│   └── experiment_service.py           # Thread-safe experiment staging manager
+│
+├── simulation_history.json             # Persistent log of user-executed experiments
+├── experiment_results.csv              # Raw Monte Carlo trial logs (104,000 trials)
+├── metrics_results.csv                 # Aggregated performance metrics
+├── main.py                             # Interactive console CLI menu
+├── run_web.py                          # Web launcher script
+└── README.md                           # Documentation & manual
+```
+
+### OOP Principles Demonstrated
+- **Abstraction:** The abstract base class `ErrorDetection` defines standard methods (`encode`, `verify`, `get_working_steps`, `get_redundancy_bits`, `get_overhead_percentage`).
+- **Inheritance:** Concrete subclasses `ParityCheck`, `LRC`, `Checksum`, and `CRC` inherit from `ErrorDetection`.
+- **Encapsulation:** Internal algorithmic state (parity modes, word size, CRC generator polynomials, channel noise causes) are encapsulated within their respective classes.
+- **Runtime Polymorphism:** The `Sender`, `Receiver`, and `NetworkSimulator` interact with any `ErrorDetection` instance polymorphically without branching logic.
+- **Composition:** `NetworkSimulator` is composed of `Sender`, `TransmissionChannel`, and `Receiver`.
+- **Exception Handling & Validation:** Robust validation for binary strings, ASCII text conversion, payload lengths, and channel noise parameters.
+
+---
+
+## 3. Web Application Interface (Warm Ivory + Forest Green)
+
+The interface is styled in a **Warm Ivory + Forest Green** palette (`#F5F3ED` canvas with `#315C49` and `#244638` forest accents) featuring a persistent left sidebar and five dedicated pages:
+
+### 1. Overview Page
+- **Hero Introduction:** Highlighting the project identity, DCN scope, and primary action shortcuts.
+- **Dynamic Application Statistics:** Live indicators for Total Simulations, Injected Errors, Average Detection Rate, and Evaluated Algorithms extracted directly from `simulation_history.json`.
+- **Visual Transmission Pipeline:** Flow diagram showing `SENDER` &rarr; `ENCODER` &rarr; `TRANSMISSION CHANNEL` &rarr; `RECEIVER` &rarr; `ERROR DETECTION`.
+- **Recent Experiments Table:** Historical log showing Experiment ID, Selected Technique, Error Model, Injected Errors, Verdict, and Timestamp.
+
+### 2. Transmission Simulator (Core Feature)
+- **Step 1: Enter Data:** Binary input mode with validation or ASCII Text input with real-time automatic conversion to 8-bit binary representation, plus a random binary generator (8, 16, 32 bits).
+- **Step 2: Select Technique:** Parity Check (VRC), LRC (8-bit), Checksum (8-bit default, 16-bit RFC 1071), or CRC (CRC-8, CRC-16, CRC-32) with concise working descriptions.
+- **Step 3: Select Error Pattern:** Clean transmission (0 errors), Single-bit error, Multiple-bit errors, Textbook burst error, Consecutive burst corruption (100% solid contiguous span), Multiple burst episodes, or Manual bit injection.
+- **Step 4: Execute Transmission:** Prominent "Start Transmission" CTA triggering the real backend pipeline.
+- **Step 5: Step-by-Step Visualization:**
+  - **A. ORIGINAL DATA:** Sender payload bits.
+  - **B. ENCODED DATA:** Original bits + redundant check bits highlighted in forest green.
+  - **C & D. TRANSMISSION CHANNEL:** Frame in transit with exact physical noise cause and injection mechanism. Flipped bits highlighted in muted red.
+  - **E. RECEIVER DATA:** Received frame arriving at destination.
+  - **F. ERROR DETECTION RESULT:** Verdict banner (`[ERROR DETECTED]`, `[CLEAN TRANSMISSION]`, `[ERROR MISSED]`) with mathematical textbook explanation.
+- **Step 6: Transmission Performance Metrics:** Metric cards showing Payload Size, Frame Size, Redundancy Bits, Overhead Percentage, Latency (in $\mu s$), and Verification Verdict.
+
+### 3. Error Detection (Algorithms Guide)
+- Educational reference cards for all four techniques outlining detection guarantees, mathematical principles, blind spots, and redundancy overheads.
+- **Interactive Working Trace Viewer:** Generates real backend execution traces (e.g. Modulo-2 polynomial division steps, 1's complement addition with end-around carry, LRC matrix layout).
+
+### 4. Algorithm Comparison
+- Synchronized evaluation of all four techniques on the exact same payload data and identical physical error conditions.
+- Real-time comparison table detailing Algorithm Name, Redundancy Overhead, Latency, Injected Positions, Detection Status, and Final Verdict.
+- Comparative insight cards explaining why each technique behaves differently under specific error patterns.
+
+### 5. Experimental Analysis
+- Configuration interface for Monte Carlo benchmark sweeps (payload sizes, error quantities, burst spans, trials per configuration).
+- **Four Analytical Visualizations (300 DPI):**
+  1. *Detection Rate by Error Type and Technique* (Grouped Bar Chart)
+  2. *Detection Rate versus Error Magnitude* (Multiple-bit curve demonstrating Parity's 100% odd vs 0% even behavior)
+  3. *Processing Time versus Data Size* (Computational latency benchmark)
+  4. *Transmission Overhead versus Data Size* (Bandwidth penalty curves)
+- Filterable metrics table extracted from `metrics_results.csv`.
+
+---
+
+## 4. How to Run the Project
+
+### Prerequisites
+- Python 3.10 or higher
+- Required packages: `flask`, `pandas`, `numpy`, `matplotlib`
+
+```bash
+pip install -r requirements.txt
+```
+
+### Option A: Launch Web Application
+Start the Flask web server:
+```bash
+python run_web.py
+```
+Or directly using Flask:
+```bash
+python -m flask --app web.app run
+```
+Open your web browser and navigate to:
+```
+http://127.0.0.1:5000
+```
+
+### Option B: Run Interactive Console CLI
+Launch the terminal-based interactive CLI menu:
+```bash
+python main.py
+```
+
+### Option C: Run Benchmark Suite & Generate Visualizations
+To re-run the 104,000 Monte Carlo benchmark trials and generate high-resolution analytical graphs:
+```bash
+python experiments/experiment_runner.py
+python experiments/metrics.py
+python visualization/plot_results.py
 ```
 
 ---
 
-## 3. How to Run in Visual Studio Code
+## 5. Experimental Verification & Theoretical Alignment
 
-1. Open the project folder in **Visual Studio Code**:
-   ```
-   File -> Open Folder -> (select the project root directory)
-   ```
-2. Open the built-in terminal (`Ctrl + ~` or `Terminal -> New Terminal`).
-3. Run the interactive console application:
-   ```bash
-   python main.py
-   ```
-4. To run individual modules directly:
-   - Run Benchmark: `python experiments/experiment_runner.py`
-   - Recompute Metrics: `python experiments/metrics.py`
-   - Generate Graphs: `python visualization/plot_results.py`
-
----
-
-## 4. Main Menu Overview (`main.py`)
-
-When you run `python main.py`, the menu appears with exactly these five options:
-
-```
-========================================================================
-     DATA COMMUNICATION AND COMPUTER NETWORKS (DCN) PROJECT
-      ERROR GENERATION, DETECTION & ANALYSIS SYSTEM
-========================================================================
-  Current Session Data : 1011011011001100 (16 bits)
-========================================================================
-  1. Simulate Transmission
-  2. Compare Detection Techniques
-  3. View Algorithm Working
-  4. Run Experiments and View Graphs
-  5. Exit
-  [C] Change Session Data
-========================================================================
-```
-
-### Feature Details:
-
-- **Session Data Reuse:**
-  - Input data is configured once at startup (binary, ASCII text, or random bits) and stored in session state.
-  - Automatically reused across Options 1, 2, and 3 without asking the user repeatedly.
-  - A simple prompt (`Change data? [y/N]`) or pressing `[C]` allows updating session data anytime.
-
-- **1. Simulate Transmission:**
-  - Uses current session data.
-  - User selects detection technique (**VRC / Parity**, **LRC**, **Checksum**, **CRC**).
-  - User selects error model (**Clean**, **Single-bit**, **Multiple-bit**, **Burst**, **Manual**) and only the necessary parameters.
-  - Displays the full **Sender** $\to$ **Channel** (with visual `^` pointers at error positions) $\to$ **Receiver** $\to$ **Final Verdict** pipeline.
-
-- **2. Compare Detection Techniques:**
-  - Uses current session data.
-  - User specifies the error model only once (no preset fixed scenario lists).
-  - Automatically evaluates **VRC / Parity**, **LRC**, **Checksum**, and **CRC** on identical payload error positions.
-  - Displays a single comparative table showing Overhead (bits and %), Processing Time ($\mu s$), Detection Result, and Final Verdict.
-
-- **3. View Algorithm Working:**
-  - Displays step-by-step mathematical traces:
-    - **VRC / Parity:** Shows 1s count, parity bit rule, and appended frame.
-    - **LRC:** Shows 2D block grid, column-by-column 1s counts, and resulting LRC block check character.
-    - **Checksum:** Shows word division, 1's complement summation, end-around carry wrapping, and bitwise NOT.
-    - **CRC:** Shows generator polynomial, zero padding, full Modulo-2 XOR division trace, quotient, and FCS remainder.
-
-- **4. Run Experiments and View Graphs:**
-  - Allows configuration of payload sizes, error magnitudes, burst lengths, and trial counts.
-  - Generates fresh datasets (`experiment_results.csv`, `metrics_results.csv`).
-  - Keeps clean transmissions separate from corrupted trials.
-  - Generates the 4 required analytical graphs directly from the latest data.
-
-- **5. Exit:**
-  - Terminates the application.
-
----
-
-## 5. Analytical Visualizations Explained
-
-| Chart File | Analytical Purpose | Key DCN Takeaway |
-| :--- | :--- | :--- |
-| **`detection_rate_by_error_type.png`** | Grouped bar chart comparing the 4 techniques across Single-bit, Multiple-bit, and Burst errors. | Highlights comparative robustness: CRC provides near 100% detection across all error types; VRC drops on multiple errors; LRC provides strong burst protection. |
-| **`detection_rate_vs_error_magnitude.png`** | Evaluates detection probability as error count increases from 1 to 8 bits. | **Parity Oscillation:** VRC detects 100% of odd errors (1, 3, 5, 7) and 0% of even errors (2, 4, 6, 8) because $d_{min}=2$. LRC, Checksum, and CRC maintain high detection. |
-| **`processing_time_vs_data_size.png`** | Compares execution latency in microseconds ($\mu s$) across payload sizes (32 to 1024 bits). | Demonstrates algorithm efficiency: VRC and Checksum require simple $O(N)$ operations, while CRC polynomial division incurs slightly higher processing time. |
-| **`overhead_vs_data_size.png`** | Compares redundancy bit percentage as payload size grows from 32 to 1024 bits. | Demonstrates bandwidth trade-off: Redundancy percentage drops dramatically as payload grows ($O(1)$ redundant bits versus $O(N)$ payload). |
-
----
-
+With $N = 1,000$ trials per configuration, experimental results align with networking theory:
+- **Odd error counts (1, 3, 5, 7 bits):** CRC-8 achieves **100.0%** detection due to the $(x+1)$ factor in the generator polynomial $G(x) = x^8 + x^2 + x + 1$.
+- **Short bursts ($L \le 8$ bits):** CRC-8 achieves deterministic **100.0%** detection ($L \le r = 8$).
+- **Long bursts ($L = 12, 16$ bits):** CRC-8 detection rate converges to **99.8%**, matching the theoretical bound $1 - 2^{-r} \approx 99.61\%$.
+- **Parity Invariance:** Simple 1D Parity achieves exactly **100.0%** detection for odd errors and **0.0%** detection for even errors ($d_{min} = 2$).

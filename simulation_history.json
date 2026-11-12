@@ -1,0 +1,185 @@
+[
+  {
+    "id": "EXP-0001",
+    "timestamp": "2026-11-12 20:06:56",
+    "data": "1011011011001100",
+    "payload_length": 16,
+    "technique": "CRC (8-bit)",
+    "error_type": "single",
+    "errors_injected": 1,
+    "flipped_indices": [
+      4
+    ],
+    "is_valid": false,
+    "error_detected": true,
+    "overhead_bits": 8,
+    "overhead_percentage": 50.0,
+    "processing_time_us": 48.2
+  },
+  {
+    "id": "EXP-0002",
+    "timestamp": "2026-11-12 20:09:56",
+    "data": "1011011011001100",
+    "payload_length": 16,
+    "technique": "Parity Check (VRC)",
+    "error_type": "single",
+    "errors_injected": 1,
+    "flipped_indices": [
+      7
+    ],
+    "is_valid": false,
+    "error_detected": true,
+    "overhead_bits": 1,
+    "overhead_percentage": 6.25,
+    "processing_time_us": 4.2
+  },
+  {
+    "id": "EXP-0003",
+    "timestamp": "2026-11-12 20:12:56",
+    "data": "1011011011001100",
+    "payload_length": 16,
+    "technique": "LRC",
+    "error_type": "multiple",
+    "errors_injected": 2,
+    "flipped_indices": [
+      3,
+      11
+    ],
+    "is_valid": false,
+    "error_detected": true,
+    "overhead_bits": 8,
+    "overhead_percentage": 50.0,
+    "processing_time_us": 18.5
+  },
+  {
+    "id": "EXP-0004",
+    "timestamp": "2026-11-12 20:15:56",
+    "data": "1011011011001100",
+    "payload_length": 16,
+    "technique": "8-bit Checksum",
+    "error_type": "burst",
+    "errors_injected": 4,
+    "flipped_indices": [
+      6,
+      7,
+      8,
+      9
+    ],
+    "is_valid": false,
+    "error_detected": true,
+    "overhead_bits": 8,
+    "overhead_percentage": 50.0,
+    "processing_time_us": 31.0
+  },
+  {
+    "id": "EXP-0005",
+    "timestamp": "2026-11-12 20:18:56",
+    "data": "1011011011001100",
+    "payload_length": 16,
+    "technique": "Parity Check (VRC)",
+    "error_type": "multiple",
+    "errors_injected": 2,
+    "flipped_indices": [
+      2,
+      10
+    ],
+    "is_valid": true,
+    "error_detected": false,
+    "overhead_bits": 1,
+    "overhead_percentage": 6.25,
+    "processing_time_us": 4.1
+  },
+  {
+    "id": "EXP-0006",
+    "timestamp": "2026-11-12 20:21:56",
+    "data": "1011011011001100",
+    "payload_length": 16,
+    "technique": "CRC (8-bit)",
+    "error_type": "burst",
+    "errors_injected": 8,
+    "flipped_indices": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "is_valid": false,
+    "error_detected": true,
+    "overhead_bits": 8,
+    "overhead_percentage": 50.0,
+    "processing_time_us": 52.4
+  },
+  {
+    "id": "EXP-0007",
+    "timestamp": "2026-11-12 20:24:56",
+    "data": "1011011011001100",
+    "payload_length": 16,
+    "technique": "LRC",
+    "error_type": "clean",
+    "errors_injected": 0,
+    "flipped_indices": [],
+    "is_valid": true,
+    "error_detected": false,
+    "overhead_bits": 8,
+    "overhead_percentage": 50.0,
+    "processing_time_us": 16.1
+  },
+  {
+    "id": "EXP-0008",
+    "timestamp": "2026-11-12 20:27:56",
+    "data": "1011011011001100",
+    "payload_length": 16,
+    "technique": "CRC (8-bit)",
+    "error_type": "consecutive_burst",
+    "errors_injected": 4,
+    "flipped_indices": [
+      5,
+      6,
+      7,
+      8
+    ],
+    "is_valid": false,
+    "error_detected": true,
+    "overhead_bits": 8,
+    "overhead_percentage": 50.0,
+    "processing_time_us": 49.0
+  },
+  {
+    "id": "EXP-0009",
+    "timestamp": "2026-11-12 20:43:38",
+    "data": "10110011",
+    "payload_length": 8,
+    "technique": "CRC-8",
+    "error_type": "single",
+    "errors_injected": 1,
+    "flipped_indices": [
+      3
+    ],
+    "is_valid": false,
+    "error_detected": true,
+    "overhead_bits": 8,
+    "overhead_percentage": 100.0,
+    "processing_time_us": 38.7
+  },
+  {
+    "id": "EXP-0010",
+    "timestamp": "2026-11-12 20:43:55",
+    "data": "1111000011110000",
+    "payload_length": 16,
+    "technique": "CRC-8",
+    "error_type": "single",
+    "errors_injected": 1,
+    "flipped_indices": [
+      2
+    ],
+    "is_valid": false,
+    "error_detected": true,
+    "overhead_bits": 8,
+    "overhead_percentage": 50.0,
+    "processing_time_us": 64.0
+  }
+]
