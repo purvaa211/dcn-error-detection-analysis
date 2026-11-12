@@ -280,7 +280,8 @@ class ExperimentService:
             # Pick key columns for UI display
             cols = [
                 "technique", "error_type", "data_size", "error_amount",
-                "trials", "detection_rate", "average_processing_time", "average_overhead_percentage"
+                "trials", "total_trials", "detection_rate", "average_processing_time",
+                "average_processing_time_us", "average_overhead_bits", "average_overhead_percentage"
             ]
             available_cols = [c for c in cols if c in df.columns]
             sample_df = df[available_cols].copy()
@@ -288,17 +289,30 @@ class ExperimentService:
             # Format values cleanly
             records = sample_df.to_dict(orient="records")
             for r in records:
-                if "average_processing_time" in r and r["average_processing_time"] is not None:
-                    # Convert to microseconds
-                    r["latency_us"] = round(r["average_processing_time"] * 1e6, 2)
-                if "detection_rate" in r and r["detection_rate"] is not None:
-                    r["detection_rate"] = round(r["detection_rate"], 1)
-                if "average_overhead_percentage" in r and r["average_overhead_percentage"] is not None:
-                    r["overhead_pct"] = round(r["average_overhead_percentage"], 1)
+                if "average_processing_time_us" in r and pd.notna(r["average_processing_time_us"]):
+                    r["latency_us"] = round(float(r["average_processing_time_us"]), 2)
+                elif "average_processing_time" in r and pd.notna(r["average_processing_time"]):
+                    r["latency_us"] = round(float(r["average_processing_time"]) * 1e6, 2)
+                else:
+                    r["latency_us"] = 0.0
+
+                if "total_trials" in r and pd.notna(r["total_trials"]):
+                    r["total_trials"] = int(r["total_trials"])
+                elif "trials" in r and pd.notna(r["trials"]):
+                    r["total_trials"] = int(r["trials"])
+                else:
+                    r["total_trials"] = 1000
+
+                if "detection_rate" in r and pd.notna(r["detection_rate"]):
+                    r["detection_rate"] = round(float(r["detection_rate"]), 1)
+
+                if "average_overhead_percentage" in r and pd.notna(r["average_overhead_percentage"]):
+                    r["overhead_pct"] = round(float(r["average_overhead_percentage"]), 1)
 
             return {
                 "success": True,
                 "records": records,
+                "rows": records,
                 "total_rows": len(records),
                 "source": "staged" if (csv_path and "staging" in csv_path) else "baseline"
             }

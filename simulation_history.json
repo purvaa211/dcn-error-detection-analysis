@@ -181,5 +181,42 @@
     "overhead_bits": 8,
     "overhead_percentage": 50.0,
     "processing_time_us": 64.0
+  },
+  {
+    "id": "EXP-0011",
+    "timestamp": "2026-11-12 20:52:29",
+    "data": "0110100001101001",
+    "payload_length": 16,
+    "technique": "CRC-8",
+    "error_type": "single",
+    "errors_injected": 1,
+    "flipped_indices": [
+      20
+    ],
+    "is_valid": false,
+    "error_detected": true,
+    "overhead_bits": 8,
+    "overhead_percentage": 50.0,
+    "processing_time_us": 258.8
+  },
+  {
+    "id": "EXP-0012",
+    "timestamp": "2026-11-12 20:52:46",
+    "data": "0110100001101001",
+    "payload_length": 16,
+    "technique": "CRC-8",
+    "error_type": "consecutive_burst",
+    "errors_injected": 4,
+    "flipped_indices": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "is_valid": false,
+    "error_detected": true,
+    "overhead_bits": 8,
+    "overhead_percentage": 50.0,
+    "processing_time_us": 193.1
   }
 ]

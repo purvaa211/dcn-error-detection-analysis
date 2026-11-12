@@ -51,7 +51,6 @@ const PAGE_META = {
 // ==========================================================================
 
 document.addEventListener("DOMContentLoaded", () => {
-    initLiveDate();
     initSession();
     loadOverviewStats();
     loadMetricsTable();
@@ -65,13 +64,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
-function initLiveDate() {
-    const el = document.getElementById("live-date-pill");
-    if (el) {
-        const options = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
-        el.textContent = new Date().toLocaleDateString("en-US", options);
-    }
-}
+
 
 function navigateToPage(pageId) {
     if (!PAGE_META[pageId]) return;
@@ -110,6 +103,8 @@ function navigateToPage(pageId) {
         loadTraceForAlgo(AppState.currentTraceAlgo);
     } else if (pageId === "comparison") {
         updateCompPayloadDisplay();
+    } else if (pageId === "experiments") {
+        loadMetricsTable();
     }
 }
 
@@ -728,12 +723,18 @@ async function loadMetricsTable() {
     try {
         const res = await fetch("/api/metrics");
         const json = await res.json();
-        if (json.success && json.rows) {
-            AppState.metricsData = json.rows;
-            renderMetricsTableRows(json.rows);
+        const records = json.records || json.rows || [];
+        if (json.success && records.length > 0) {
+            AppState.metricsData = records;
+            renderMetricsTableRows(records);
+        } else if (records.length === 0) {
+            const tbody = document.getElementById("metrics-table-body");
+            if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center" style="padding:24px; color:var(--text-muted);">No metrics found in metrics_results.csv. Run benchmark experiments to populate.</td></tr>`;
         }
     } catch (e) {
         console.error("Failed to load metrics table:", e);
+        const tbody = document.getElementById("metrics-table-body");
+        if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center" style="padding:24px; color:var(--status-error-text);">Failed to load metrics dataset.</td></tr>`;
     }
 }
 
@@ -742,25 +743,30 @@ function renderMetricsTableRows(rows) {
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    if (rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center" style="padding:24px;">No metrics found. Run benchmark experiments to populate.</td></tr>`;
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center" style="padding:24px; color:var(--text-muted);">No metrics matching your search.</td></tr>`;
         return;
     }
 
-    // Limit to top 50 for smooth rendering
-    const displayRows = rows.slice(0, 60);
+    // Render up to 100 rows
+    const displayRows = rows.slice(0, 100);
 
     displayRows.forEach(r => {
         const tr = document.createElement("tr");
+        const trialsVal = r.total_trials || r.trials || 1000;
+        const latencyVal = r.latency_us != null ? r.latency_us : (r.average_processing_time_us != null ? r.average_processing_time_us : (r.average_processing_time ? (r.average_processing_time * 1e6).toFixed(2) : 0));
+        const overheadVal = r.overhead_pct != null ? r.overhead_pct : (r.average_overhead_percentage != null ? r.average_overhead_percentage : 0);
+        const detVal = r.detection_rate != null ? r.detection_rate : 0;
+
         tr.innerHTML = `
             <td><strong>${escapeHtml(r.technique)}</strong></td>
             <td>${escapeHtml(r.error_type)}</td>
             <td>${r.data_size} bits</td>
             <td>${r.error_amount}</td>
-            <td>${r.total_trials}</td>
-            <td><strong>${r.detection_rate}%</strong></td>
-            <td>${r.average_processing_time_us} µs</td>
-            <td>${r.average_overhead_percentage}%</td>
+            <td>${trialsVal}</td>
+            <td><strong>${detVal}%</strong></td>
+            <td>${latencyVal} µs</td>
+            <td>${overheadVal}%</td>
         `;
         tbody.appendChild(tr);
     });
