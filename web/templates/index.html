@@ -31,6 +31,10 @@
                     <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                     <span>Transmission Simulator</span>
                 </button>
+                <button class="nav-link" data-page="traffic" onclick="navigateToPage('traffic')">
+                    <svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+                    <span>Network Traffic Analysis</span>
+                </button>
                 <button class="nav-link" data-page="detection" onclick="navigateToPage('detection')">
                     <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                     <span>Error Detection</span>
@@ -208,6 +212,7 @@
                                     <div class="input-mode-tabs">
                                         <button type="button" class="input-tab-btn active" id="tab-btn-binary" onclick="setSimulatorInputMode('binary')">Binary Input</button>
                                         <button type="button" class="input-tab-btn" id="tab-btn-text" onclick="setSimulatorInputMode('text')">Text Input (ASCII)</button>
+                                        <button type="button" class="input-tab-btn" id="tab-btn-traffic" onclick="navigateToPage('traffic')">Network Traffic (PCAP)</button>
                                     </div>
 
                                     <!-- Binary Input Form -->
@@ -241,6 +246,7 @@
                                             <option value="LRC">LRC (Longitudinal Redundancy Check - 8-bit)</option>
                                             <option value="Checksum">8-bit Internet Checksum (1's Complement)</option>
                                             <option value="CRC" selected>CRC (Cyclic Redundancy Check)</option>
+                                            <option value="Hamming (7,4)">Hamming (7,4) Error-Correcting Code</option>
                                         </select>
                                     </div>
 
@@ -458,6 +464,279 @@
                     </div>
                 </section>
 
+                <!-- ============================================================== -->
+                <!-- PAGE: NETWORK TRAFFIC ERROR DETECTION                          -->
+                <!-- ============================================================== -->
+                <section id="view-traffic" class="page-view">
+                    <!-- Top Intro & Capture Source Card -->
+                    <div class="card mb-4">
+                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+                            <div>
+                                <h2 class="card-title">Network Traffic Error Detection & Packet Inspection</h2>
+                                <p class="card-desc">Inspect captured Wireshark PCAP/PCAPNG traffic, audit protocol checksums, extract application payloads into binary, and evaluate canonical error detection techniques.</p>
+                            </div>
+                            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                <input type="file" id="traffic-pcap-input" accept=".pcap,.pcapng,.cap" style="display:none;" onchange="handlePcapUploadEvent(event)">
+                                <button class="btn btn-outline" onclick="document.getElementById('traffic-pcap-input').click()">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                    Upload PCAP / PCAPNG
+                                </button>
+                                <button class="btn btn-primary" onclick="loadSampleTrafficPcap()">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                    Load Sample Capture
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Active Capture Summary KPIs -->
+                        <div id="traffic-summary-bar" class="stats-grid mt-3" style="display:none;">
+                            <div class="stat-card">
+                                <div class="stat-label">Capture File</div>
+                                <div class="stat-value" id="traf-stat-file" style="font-size:1.05rem; word-break:break-all;">-</div>
+                                <div class="stat-sub" id="traf-stat-count">0 total packets</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Packets with Payload</div>
+                                <div class="stat-value" id="traf-stat-payloads">-</div>
+                                <div class="stat-sub">Contain application data</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Checksum Integrity</div>
+                                <div class="stat-value" id="traf-stat-valid" style="color:var(--status-success-text);">-</div>
+                                <div class="stat-sub" id="traf-stat-checksum-sub">Header checks evaluated</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Protocols Identified</div>
+                                <div class="stat-value" id="traf-stat-protocols">-</div>
+                                <div class="stat-sub">Across L3/L4/Application</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Packet Inspection Table -->
+                    <div class="card mb-4" id="traffic-packets-card" style="display:none;">
+                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                            <div>
+                                <h3 class="card-title">Inspect Captured Packets for Detectable Errors</h3>
+                                <p class="card-desc">Audit available IPv4, TCP, and UDP checksums. Click <strong>"Select Packet"</strong> to extract its payload for error detection.</p>
+                            </div>
+                            <input type="text" id="traffic-search-input" class="form-control" style="max-width:240px;" placeholder="Search packets..." oninput="filterTrafficTable()">
+                        </div>
+
+                        <!-- Technical Nuance Banner -->
+                        <div style="background:var(--bg-secondary); border-left:3px solid var(--primary); padding:10px 14px; margin-bottom:14px; border-radius:4px; font-size:0.82rem; color:var(--text-secondary); line-height:1.4;">
+                            <strong>Technical Consideration:</strong> OS packet capture libraries (libpcap) receive frames after the Network Interface Card (NIC) strips the 32-bit Ethernet FCS. Checksum offloading on transmitting hosts may leave outgoing TCP/UDP checksums as 0x0000 or uncomputed. IPv6 headers deliberately omit a checksum (RFC 8200). A missing checksum is not proof of corruption.
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table" id="traffic-packet-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Protocol</th>
+                                        <th>Source Address</th>
+                                        <th>Destination Address</th>
+                                        <th>Size (Bytes)</th>
+                                        <th>Payload</th>
+                                        <th>Checksum / Error Audit</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="traffic-packet-tbody">
+                                    <tr><td colspan="8" class="text-center">No capture loaded. Upload a PCAP file or click "Load Sample Capture" above.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Step 3 & 4: Selected Packet Payload & Error Detection Setup -->
+                    <div id="traffic-selected-card" class="card mb-4" style="display:none;">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title" id="traf-selected-title">Selected Packet Payload Extraction</h3>
+                                <p class="card-desc">Extracted raw packet payload and binary representation for application-level error detection.</p>
+                            </div>
+                            <button class="btn btn-sm btn-outline" id="btn-use-as-simulator" onclick="useCurrentPacketAsSimPayload()">
+                                Use as Active Simulator Payload
+                            </button>
+                        </div>
+
+                        <div id="traf-empty-payload-warning" style="display:none; background:#FFF3CD; border:1px solid #FFEEBA; color:#856404; padding:12px; border-radius:6px; margin-bottom:14px; font-size:0.88rem;">
+                            <!-- Warning text dynamically filled -->
+                        </div>
+
+                        <div id="traf-usable-payload-area">
+                            <div class="stats-grid mb-3" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+                                <div class="stat-card" style="padding:12px;">
+                                    <div class="stat-label">Payload Size (Bytes)</div>
+                                    <div class="stat-value" id="traf-payload-byte-len" style="font-size:1.2rem;">-</div>
+                                </div>
+                                <div class="stat-card" style="padding:12px;">
+                                    <div class="stat-label">Payload Bitstream Length</div>
+                                    <div class="stat-value" id="traf-payload-bit-len" style="font-size:1.2rem;">-</div>
+                                </div>
+                                <div class="stat-card" style="padding:12px;">
+                                    <div class="stat-label">Transport Checksum</div>
+                                    <div class="stat-value" id="traf-payload-chksum-label" style="font-size:1.0rem;">-</div>
+                                </div>
+                            </div>
+
+                            <!-- Hex & ASCII Inspection -->
+                            <div class="form-group mb-3">
+                                <label>Hex Dump Preview:</label>
+                                <div class="trace-code" id="traf-hex-dump" style="max-height:100px; overflow-y:auto; font-size:0.8rem;">-</div>
+                            </div>
+                            <div class="form-group mb-3">
+                                <label>ASCII Interpretation Preview:</label>
+                                <div class="trace-code" id="traf-ascii-preview" style="max-height:80px; overflow-y:auto; font-size:0.8rem;">-</div>
+                            </div>
+
+                            <!-- Binary String Display -->
+                            <div class="form-group mb-4">
+                                <label>Binary Bitstream Representation ('0' and '1'):</label>
+                                <div class="trace-code" id="traf-binary-preview" style="max-height:120px; overflow-y:auto; word-break:break-all; font-size:0.82rem; font-weight:600; color:var(--primary);">-</div>
+                            </div>
+
+                            <!-- Step 4 & 5: Error Detection Strategy & Controlled Error Controls -->
+                            <div style="background:var(--bg-secondary); border-radius:8px; padding:16px; border:1px solid var(--border-color);">
+                                <h4 style="margin:0 0 12px 0; color:var(--primary);">Apply Error Detection on Captured Payload</h4>
+                                <p style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:14px;">
+                                    Real application payloads transmitted over network links require explicit framing. Our engine computes canonical reference check bits for this payload, and optionally evaluates detection performance against channel errors.
+                                </p>
+
+                                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:14px;">
+                                    <div class="form-group" style="margin-bottom:0;">
+                                        <label for="traf-tech-select">Detection Technique:</label>
+                                        <select id="traf-tech-select" class="form-control" onchange="handleTrafficTechChange()">
+                                            <option value="VRC / Parity">Parity Check / VRC (1-bit Even Parity)</option>
+                                            <option value="LRC">LRC (Longitudinal Redundancy Check - 8-bit)</option>
+                                            <option value="Checksum">8-bit Internet Checksum (1's Complement)</option>
+                                            <option value="CRC" selected>CRC (CRC-8 Modulo-2 Division)</option>
+                                            <option value="Hamming (7,4)">Hamming (7,4) Error-Correcting Code</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="form-group" id="traf-crc-poly-wrap" style="margin-bottom:0;">
+                                        <label for="traf-crc-poly">CRC Generator Polynomial:</label>
+                                        <select id="traf-crc-poly" class="form-control">
+                                            <option value="100000111">CRC-8 (x^8 + x^2 + x + 1)</option>
+                                            <option value="11000000000000101">CRC-16-IBM</option>
+                                            <option value="100000100110000010001110110110111">CRC-32-IEEE 802.3</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Controlled Error Testing Toggle -->
+                                <div style="background:var(--card-bg); padding:12px; border-radius:6px; border:1px solid var(--border-color); margin-bottom:16px;">
+                                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                        <input type="checkbox" id="traf-inject-toggle" onchange="toggleTrafficErrorOptions()">
+                                        <label for="traf-inject-toggle" style="margin:0; font-weight:700; cursor:pointer;">
+                                            Introduce Controlled Transmission Error (Experimental Test)
+                                        </label>
+                                    </div>
+                                    <p style="font-size:0.80rem; color:var(--text-secondary); margin:0 0 10px 0;">
+                                        Creates an isolated copy of the payload to simulate physical channel disturbance, leaving original payload untouched.
+                                    </p>
+
+                                    <div id="traf-error-options-box" style="display:none; grid-template-columns: 1fr 1fr; gap:12px;">
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label for="traf-error-type">Error Model:</label>
+                                            <select id="traf-error-type" class="form-control">
+                                                <option value="single">Single-Bit Inversion (1 bit)</option>
+                                                <option value="multiple">Multiple-Bit Noise (2 bits)</option>
+                                                <option value="burst">Burst Disturbance (4-bit span)</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label for="traf-error-amount">Magnitude / Span:</label>
+                                            <input type="number" id="traf-error-amount" class="form-control" value="2" min="1" max="16">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                                    <button class="btn btn-primary" onclick="executeTrafficDetection()">
+                                        Run Detection on Selected Technique
+                                    </button>
+                                    <button class="btn btn-secondary" onclick="executeTrafficComparison()">
+                                        Compare All Techniques Side-by-Side
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 6: Traffic Detection Report Card -->
+                    <div id="traffic-results-card" class="card mb-4" style="display:none;">
+                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <h3 class="card-title">Packet Error Detection Results</h3>
+                                <p class="card-desc">Verification output, channel noise identification, and computational performance analysis.</p>
+                            </div>
+                            <span id="traf-result-pill" class="badge badge-neutral">Clean Baseline</span>
+                        </div>
+
+                        <!-- Results Verdict Box -->
+                        <div style="background:var(--bg-secondary); border-radius:6px; padding:14px; margin-bottom:16px;">
+                            <div style="font-size:1.05rem; font-weight:700; margin-bottom:6px;" id="traf-result-verdict-title">-</div>
+                            <div style="font-size:0.86rem; color:var(--text-primary); line-height:1.5;" id="traf-result-explanation">-</div>
+                        </div>
+
+                        <!-- Metrics Grid -->
+                        <div class="stats-grid mb-4" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+                            <div class="stat-card" style="padding:10px;">
+                                <div class="stat-label">Injected Errors</div>
+                                <div class="stat-value" id="traf-res-errors" style="font-size:1.15rem;">0 bits</div>
+                            </div>
+                            <div class="stat-card" style="padding:10px;">
+                                <div class="stat-label">Redundancy Added</div>
+                                <div class="stat-value" id="traf-res-overhead" style="font-size:1.15rem;">-</div>
+                            </div>
+                            <div class="stat-card" style="padding:10px;">
+                                <div class="stat-label">Bandwidth Overhead</div>
+                                <div class="stat-value" id="traf-res-pct" style="font-size:1.15rem;">-</div>
+                            </div>
+                            <div class="stat-card" style="padding:10px;">
+                                <div class="stat-label">Execution Latency</div>
+                                <div class="stat-value" id="traf-res-latency" style="font-size:1.15rem;">-</div>
+                            </div>
+                        </div>
+
+                        <!-- Bitstream Comparison Visualizer -->
+                        <div id="traf-bitstream-vis-wrap" style="display:none;">
+                            <label style="font-weight:700; margin-bottom:6px; display:block;">Bit-Level Transmission Stream Comparison:</label>
+                            <div class="trace-code mb-2" id="traf-vis-frame-view" style="font-size:0.80rem; max-height:140px; overflow-y:auto; word-break:break-all;"></div>
+                            <span class="form-hint" id="traf-vis-indices-hint"></span>
+                        </div>
+                    </div>
+
+                    <!-- Comparison Matrix Card -->
+                    <div id="traffic-compare-card" class="card mb-4" style="display:none;">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">Synchronized Comparative Analysis Across Techniques</h3>
+                                <p class="card-desc">Evaluates all canonical schemes on the identical captured packet payload under equivalent error conditions.</p>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table" id="traffic-comp-table">
+                                <thead>
+                                    <tr>
+                                        <th>Technique</th>
+                                        <th>Redundancy Overhead</th>
+                                        <th>Processing Latency</th>
+                                        <th>Corrupted Bit Indices</th>
+                                        <th>Detection Status</th>
+                                        <th>Final Verdict</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="traffic-comp-tbody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
 
                 <!-- ============================================================== -->
                 <!-- PAGE 3: ERROR DETECTION (ALGORITHMS GUIDE)                     -->
@@ -523,6 +802,19 @@
                                 </div>
                                 <button class="btn btn-sm btn-outline" onclick="loadTraceForAlgo('crc')">View Live Calculation Working</button>
                             </div>
+
+                            <!-- 5. Hamming (7,4) Code -->
+                            <div class="algo-card">
+                                <span class="algo-badge">Forward Error Correction (FEC)</span>
+                                <h3>Hamming (7,4) Code</h3>
+                                <p>Encodes 4 data bits into 7-bit blocks with 3 parity bits at power-of-2 positions. Minimum Hamming distance d_min = 3.</p>
+                                <div class="algo-specs">
+                                    <span><strong>Detection & Correction Guarantee:</strong> Corrects 1 bit per block (100% single-bit correction).</span>
+                                    <span><strong>Blind Spot:</strong> Detects 2 bit errors only in the extended SECDED variant (not implemented here; 2 errors cause miscorrection).</span>
+                                    <span><strong>Redundancy:</strong> 3 parity bits per 4 data bits (75% overhead).</span>
+                                </div>
+                                <button class="btn btn-sm btn-outline" onclick="loadTraceForAlgo('hamming')">View Live Calculation Working</button>
+                            </div>
                         </div>
 
                         <!-- Live Working Trace Display -->
@@ -537,6 +829,80 @@
                                 </div>
                             </div>
                             <div id="algo-trace-content" class="trace-code">Click "View Live Calculation Working" on any algorithm above to inspect its step-by-step mathematical trace for active payload.</div>
+                        </div>
+                        <!-- Real-World Protocol Mapping Card -->
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <div>
+                                    <h2 class="card-title">Where These Techniques Are Used in Real Networks</h2>
+                                    <p class="card-desc">Industry standards, OSI layer mapping, and practical application boundaries across modern networking stacks.</p>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Technique</th>
+                                            <th>Layer</th>
+                                            <th>Real protocol / standard</th>
+                                            <th>Where it is applied</th>
+                                            <th>Typical width</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>Parity / VRC</strong></td>
+                                            <td>Data Link / Physical</td>
+                                            <td>Serial UART links, memory (RAM) parity</td>
+                                            <td>Per character/byte</td>
+                                            <td>1 bit</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>LRC</strong></td>
+                                            <td>Data Link</td>
+                                            <td>Block-oriented protocols (e.g. legacy byte-oriented/binary synchronous links)</td>
+                                            <td>Per block of bytes</td>
+                                            <td>8 bits</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Internet Checksum (1's complement, RFC 1071)</strong></td>
+                                            <td>Network / Transport</td>
+                                            <td>IPv4 header, TCP, UDP, ICMP</td>
+                                            <td>Header and/or segment</td>
+                                            <td>16 bits</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>CRC-32</strong></td>
+                                            <td>Data Link</td>
+                                            <td>Ethernet (IEEE 802.3) Frame Check Sequence, also Wi-Fi 802.11 FCS</td>
+                                            <td>Whole frame</td>
+                                            <td>32 bits</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>CRC-16</strong></td>
+                                            <td>Data Link</td>
+                                            <td>HDLC / PPP-style links, Modbus, USB data</td>
+                                            <td>Frame/packet</td>
+                                            <td>16 bits</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>CRC-8</strong></td>
+                                            <td>Data Link / Embedded</td>
+                                            <td>Short control fields and embedded sensor links</td>
+                                            <td>Small frames</td>
+                                            <td>8 bits</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Hamming (7,4)</strong></td>
+                                            <td>Data Link / Memory</td>
+                                            <td>ECC memory, forward error correction concept</td>
+                                            <td>Per 4-bit nibble</td>
+                                            <td>3 parity bits (corrects 1-bit)</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="form-hint" style="margin-top:12px; font-size:0.88rem;">Detection only asks for a retransmission (ARQ); correction codes like Hamming repair errors without retransmission.</p>
                         </div>
                     </div>
                 </section>
@@ -751,6 +1117,34 @@
                                 </thead>
                                 <tbody id="metrics-table-body">
                                     <tr><td colspan="8" class="text-center">Loading benchmark metrics...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                                    <!-- Theory vs Measured Detection Rate Card -->
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">Theory vs Measured Detection Rate</h3>
+                                <p class="card-desc">Comparison of empirical benchmark detection rates against analytical limits from networking theory.</p>
+                            </div>
+                            <input type="text" id="theory-search-input" class="form-control" style="max-width:240px;" placeholder="Search theory..." oninput="filterTheoryTable()">
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table" id="theory-table">
+                                <thead>
+                                    <tr>
+                                        <th>Technique</th>
+                                        <th>Error Type</th>
+                                        <th>Parameter</th>
+                                        <th>Measured %</th>
+                                        <th>Theoretical %</th>
+                                        <th>Difference</th>
+                                        <th>Note</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="theory-table-body">
+                                    <tr><td colspan="7" class="text-center">Loading theoretical comparison...</td></tr>
                                 </tbody>
                             </table>
                         </div>

@@ -22,6 +22,14 @@ from algorithms.parity import add_vrc, check_vrc, format_vrc_working
 from algorithms.lrc import add_lrc, check_lrc, calculate_lrc, format_lrc_working
 from algorithms.checksum import add_checksum, verify_checksum_detailed, format_checksum_working
 from algorithms.crc import crc_encode, crc_check_detailed, format_crc_working, CRC_POLYNOMIALS
+from algorithms.hamming import format_hamming_working
+from core.traffic_analysis import (
+    parse_pcap_file,
+    extract_packet_payload_details,
+    evaluate_traffic_error_detection,
+    compare_all_traffic_techniques,
+    generate_sample_pcap
+)
 from simulation.simulator import simulate, compare_all_techniques
 from simulation.error_generator import (
     clean_transmission,
@@ -267,13 +275,15 @@ def run_simulate_transmission() -> None:
     print("  [2] LRC          (Longitudinal Redundancy Check)")
     print("  [3] Checksum     (1's Complement - 8-bit)")
     print("  [4] CRC          (Cyclic Redundancy Check - CRC-8)")
+    print("  [5] Hamming      (Hamming (7,4) Error-Correcting Code)")
 
-    tech_choice = input("\nChoice [1-4] (default 4): ").strip()
+    tech_choice = input("\nChoice [1-5] (default 4): ").strip()
     tech_map = {
         "1": "VRC / Parity",
         "2": "LRC",
         "3": "Checksum",
-        "4": "CRC"
+        "4": "CRC",
+        "5": "Hamming (7,4)"
     }
     technique = tech_map.get(tech_choice, "CRC")
 
@@ -338,9 +348,28 @@ def run_simulate_transmission() -> None:
         exp = sim["diagnostics"].get("expected_parity", "")
         print(f"  Received Parity  : {rec}")
         print(f"  Computed Parity  : {exp}")
+    elif "Hamming" in sim["technique"]:
+        syndromes = sim["diagnostics"].get("syndromes", [])
+        corr_pos = sim["diagnostics"].get("corrected_positions", [])
+        corr_frame = sim["diagnostics"].get("corrected_frame", "")
+        dec_payload = sim["diagnostics"].get("decoded_payload", "")
+        print(f"  Block Syndromes  : {syndromes}")
+        print(f"  Error Positions  : {corr_pos if corr_pos else 'None (Clean)'}")
+        print(f"  Corrected Frame  : {corr_frame}")
+        print(f"  Decoded Payload  : {dec_payload}")
 
     print("\n[STAGE 4: FINAL DETECTION RESULT]")
-    if sim["errors_injected"] == 0:
+    if "Hamming" in sim["technique"]:
+        verdict = sim.get("hamming_verdict", "")
+        if not verdict:
+            if sim["errors_injected"] == 0:
+                verdict = "[CLEAN TRANSMISSION]"
+            elif sim["diagnostics"].get("successfully_corrected"):
+                verdict = "[ERROR DETECTED AND CORRECTED]"
+            else:
+                verdict = "[ERROR DETECTED - NOT CORRECTABLE / MISCORRECTED]"
+        print(f"  Verdict: {verdict}")
+    elif sim["errors_injected"] == 0:
         print("  Verdict: [CLEAN TRANSMISSION - FRAME ACCEPTED]")
     elif sim["error_detected"]:
         print("  Verdict: [ERROR DETECTED - FRAME REJECTED]")
@@ -391,7 +420,17 @@ def run_compare_techniques() -> None:
         tech = r["technique"]
         ovh = f"{r['overhead_bits']} bit(s) ({r['overhead_percentage']:.1f}%)"
         time_us = f"{r['processing_time'] * 1e6:.2f} us"
-        if r["errors_injected"] == 0:
+        if "Hamming" in tech:
+            if r["errors_injected"] == 0:
+                det_str = "CLEAN [VALID]"
+                verdict = "[CLEAN TRANSMISSION]"
+            elif r.get("hamming_verdict") == "[ERROR DETECTED AND CORRECTED]" or r.get("diagnostics", {}).get("successfully_corrected"):
+                det_str = "CORRECTED"
+                verdict = "[ERROR DETECTED AND CORRECTED]"
+            else:
+                det_str = "MISCORRECTED"
+                verdict = "[NOT CORRECTABLE / MISCORRECTED]"
+        elif r["errors_injected"] == 0:
             det_str = "CLEAN [VALID]"
             verdict = "Frame Accepted"
         elif r["error_detected"]:
@@ -424,28 +463,33 @@ def run_view_algorithm_working() -> None:
     print("  [2] LRC          Working")
     print("  [3] Checksum     Working (1's Complement)")
     print("  [4] CRC          Working (Modulo-2 Division)")
-    print("  [5] View All Four Algorithms")
+    print("  [5] Hamming      Working (Hamming (7,4) Code)")
+    print("  [6] View All Five Algorithms")
 
-    c = input("\nChoice [1-5] (default 5): ").strip()
+    c = input("\nChoice [1-6] (default 6): ").strip()
     if not c:
-        c = "5"
+        c = "6"
 
     print(f"\nCalculating for Data ({len(data)} bits): {data}\n")
 
-    if c in ("1", "5"):
+    if c in ("1", "6"):
         print(format_vrc_working(data, mode="even"))
         print()
 
-    if c in ("2", "5"):
+    if c in ("2", "6"):
         print(format_lrc_working(data, block_size=8))
         print()
 
-    if c in ("3", "5"):
+    if c in ("3", "6"):
         print(format_checksum_working(data, word_size=8))
         print()
 
-    if c in ("4", "5"):
+    if c in ("4", "6"):
         print(format_crc_working(data, generator="100000111"))
+        print()
+
+    if c in ("5", "6"):
+        print(format_hamming_working(data))
         print()
 
 
@@ -579,6 +623,205 @@ def run_experiments_and_graphs() -> None:
 # MAIN INTERACTIVE LOOP
 # ======================================================================
 
+
+# ======================================================================
+# NETWORK TRAFFIC ANALYSIS & PACKET ERROR DETECTION (CLI)
+# ======================================================================
+
+def run_traffic_cli_analysis() -> None:
+    """Option T: Inspect Wireshark PCAP packets, extract payloads, and run error detection."""
+    global SESSION_DATA
+    print("\n" + "=" * 72)
+    print(" NETWORK TRAFFIC ANALYSIS & PACKET ERROR DETECTION")
+    print("=" * 72)
+
+    sample_path = os.path.join(PROJECT_ROOT, "samples", "sample_capture.pcap")
+    if not os.path.exists(sample_path):
+        generate_sample_pcap(sample_path)
+
+    print(f"\nEnter path to PCAP / PCAPNG capture file")
+    print(f"[Press Enter to use bundled demonstration: samples/sample_capture.pcap]:")
+    raw_path = input("Path > ").strip()
+    pcap_path = raw_path if raw_path else sample_path
+
+    if not os.path.exists(pcap_path):
+        print(f" [!] File not found at '{pcap_path}'. Using bundled sample capture.")
+        pcap_path = sample_path
+
+    print(f"\nReading and auditing packets with Scapy...")
+    res = parse_pcap_file(pcap_path)
+    if not res.get("success"):
+        print(f" [!] Error: {res.get('error')}")
+        return
+
+    packets = res["packets"]
+    summary = res["summary"]
+
+    print("\n" + "-" * 72)
+    print(f" CAPTURE SUMMARY: {os.path.basename(pcap_path)}")
+    print(f" Total Packets: {summary['total_packets']} | With Payload: {summary['packets_with_payload']}")
+    cs = summary['checksum_summary']
+    print(f" Checksum Audit: {cs.get('valid', 0)} Valid, {cs.get('mismatch', 0)} Mismatch, {cs.get('offload', 0)} Offload/Other")
+    print("-" * 72)
+
+    header = f"{'#':<4} | {'Protocol':<12} | {'Source -> Destination':<32} | {'Size':<6} | {'Payload':<10} | {'Checksum Audit'}"
+    print(header)
+    print("-" * 90)
+
+    for p in packets:
+        src = f"{p['src_ip']}:{p['src_port']}" if p['src_port'] else p['src_ip']
+        dst = f"{p['dst_ip']}:{p['dst_port']}" if p['dst_port'] else p['dst_ip']
+        flow = f"{src} -> {dst}"
+        flow = flow[:30]
+        pay_str = f"{p['payload_size_bytes']} B" if p['has_payload'] else "0 B"
+        chk_label = p['checksum_label']
+        print(f"{p['packet_number']:<4} | {p['protocol']:<12} | {flow:<32} | {p['packet_size_bytes']:<6} | {pay_str:<10} | {chk_label}")
+
+    print("-" * 90)
+    print(" Note: IPv6 headers have no checksum (RFC 8200). Outgoing TCP/UDP checksums may reflect NIC offloading.")
+
+    sel = input(f"\nSelect Packet Number to inspect [1-{len(packets)}] (Enter to cancel): ").strip()
+    if not sel or not sel.isdigit():
+        return
+
+    pkt_num = int(sel)
+    if pkt_num < 1 or pkt_num > len(packets):
+        print(" [!] Invalid packet number.")
+        return
+
+    idx = pkt_num - 1
+    details = extract_packet_payload_details(pcap_path, idx)
+    if not details.get("success"):
+        print(f" [!] Error: {details.get('error')}")
+        return
+
+    meta = details["metadata"]
+    print("\n" + "=" * 72)
+    print(f" PACKET #{pkt_num} DETAILS ({meta['protocol']})")
+    print(f" Flow: {meta['src_ip']} -> {meta['dst_ip']} | Length: {meta['packet_size_bytes']} bytes")
+    print(f" Checksum Details: {meta['checksum_details']}")
+    print("=" * 72)
+
+    if not details["has_payload"]:
+        print(f"\n [!] {details.get('reason')}\n")
+        return
+
+    print(f"\nPayload Size: {details['byte_length']} bytes ({details['bit_length']} bits)")
+    print(f"Hex Dump: {details['hex_dump'][:60]}...")
+    print(f"ASCII   : {details['ascii_preview'][:60]}...")
+    print(f"Binary  : {details['binary_string'][:64]}...")
+
+    bin_data = details["binary_string"]
+
+    print("\nChoose Error Detection Action:")
+    print("  [1] Set this Packet Payload as Active Session Data for Simulator")
+    print("  [2] Run Canonical Error Detection on this Packet")
+    print("  [3] Compare All 5 Techniques Side-by-Side on this Packet")
+    print("  [0] Return to Main Menu")
+
+    action = input("\nChoice [1-3] (default 2): ").strip()
+
+    if action == "1":
+        SESSION_DATA = bin_data
+        print(f"\n[+] Active Session Data updated to Packet #{pkt_num} payload ({len(bin_data)} bits).")
+        return
+
+    elif action in ("2", ""):
+        print("\nSelect Technique:")
+        print("  [1] VRC / Parity Check")
+        print("  [2] LRC")
+        print("  [3] 1's Complement Checksum")
+        print("  [4] CRC (CRC-8 Modulo-2 Division)")
+        print("  [5] Hamming (7,4) Code")
+
+        tc = input("\nChoice [1-5] (default 4): ").strip()
+        tmap = {"1": "VRC / Parity", "2": "LRC", "3": "Checksum", "4": "CRC", "5": "Hamming (7,4)"}
+        tech = tmap.get(tc, "CRC")
+
+        print("\nIntroduce Controlled Transmission Error?")
+        print("  [0] No (Verify Clean Reference Frame)")
+        print("  [1] Single-Bit Error")
+        print("  [2] Multiple-Bit Error (2 bits)")
+        print("  [3] Burst Error (4-bit span)")
+
+        ec = input("\nChoice [0-3] (default 1): ").strip()
+        inject = ec in ("1", "2", "3")
+        err_type = "single" if ec == "1" else ("multiple" if ec == "2" else ("burst" if ec == "3" else "clean"))
+        err_amt = 1 if ec == "1" else (2 if ec == "2" else 4)
+
+        sim = evaluate_traffic_error_detection(
+            binary_payload=bin_data,
+            technique=tech,
+            inject_error=inject,
+            error_type=err_type,
+            error_amount=err_amt
+        )
+
+        print("\n" + "=" * 72)
+        print(" PACKET ERROR DETECTION REPORT")
+        print("=" * 72)
+        print(f" Technique Applied: {sim['technique']}")
+        print(f" Payload Size     : {sim['payload_bits']} bits")
+        print(f" Redundant Bits   : +{sim['overhead_bits']} bits ({sim['overhead_percentage']}%)")
+        print(f" Errors Injected  : {sim['errors_injected']} bit(s) at positions {sim['flipped_indices']}")
+        print(f" Final Verdict    : {sim['verdict']}")
+        print(f" Processing Time  : {sim['processing_time_us']} us")
+        print(f"\n Explanation      : {sim['explanation']}")
+        print("=" * 72)
+
+    elif action == "3":
+        print("\nIntroduce Controlled Transmission Error for Comparison?")
+        print("  [0] No (Clean Baseline)")
+        print("  [1] Single-Bit Error")
+        print("  [2] Multiple-Bit Error (2 bits)")
+        print("  [3] Burst Error (4-bit span)")
+
+        ec = input("\nChoice [0-3] (default 1): ").strip()
+        inject = ec in ("1", "2", "3")
+        err_type = "single" if ec == "1" else ("multiple" if ec == "2" else ("burst" if ec == "3" else "clean"))
+        err_amt = 1 if ec == "1" else (2 if ec == "2" else 4)
+
+        comp = compare_all_traffic_techniques(
+            binary_payload=bin_data,
+            inject_error=inject,
+            error_type=err_type,
+            error_amount=err_amt
+        )
+
+        print("\n" + "=" * 80)
+        print(f" PACKET #{pkt_num} SYNCHRONIZED COMPARATIVE ANALYSIS ({len(bin_data)} bits)")
+        print(f" Error Model: {err_type.upper()} | Flipped Bit Indices: {comp['forced_indices']}")
+        print("=" * 80)
+
+        header = f"{'Technique':<16} | {'Redundant Bits':<16} | {'Proc. Time':<12} | {'Detection Result':<18} | {'Final Verdict'}"
+        print(header)
+        print("-" * 80)
+
+        for r in comp["results"]:
+            tech = r["technique"]
+            ovh = f"+{r['overhead_bits']} bits ({r['overhead_percentage']}%)"
+            time_us = f"{r['processing_time_us']} us"
+            if not inject or r["errors_injected"] == 0:
+                det_str = "CLEAN [VALID]"
+                verdict = "Reference Accepted"
+            elif "Hamming" in tech:
+                if "CORRECTED" in r.get("verdict", ""):
+                    det_str = "CORRECTED (FEC)"
+                    verdict = "[ERROR CORRECTED]"
+                else:
+                    det_str = "MISCORRECTED"
+                    verdict = "[NOT CORRECTABLE]"
+            elif r["error_detected"]:
+                det_str = "YES [DETECTED]"
+                verdict = "Frame Rejected"
+            else:
+                det_str = "NO  [MISSED!]"
+                verdict = "Undetected Error"
+
+            print(f"{tech:<16} | {ovh:<16} | {time_us:<12} | {det_str:<18} | {verdict}")
+
+        print("=" * 80)
+
 def main_menu() -> None:
     """Main interactive driver with exactly the five required options."""
     # 1. Setup session data once at startup
@@ -595,6 +838,7 @@ def main_menu() -> None:
         print("  4. Run Experiments and View Graphs")
         print("  5. Exit")
         print("  [C] Change Session Data")
+        print("  [T] Network Traffic Analysis (PCAP Packet Inspection & Error Detection)")
         print("=" * 72)
 
         choice = input("\nEnter your choice [1-5]: ").strip()
@@ -612,6 +856,8 @@ def main_menu() -> None:
             break
         elif choice.lower() == "c":
             prompt_change_session_data()
+        elif choice.lower() == "t":
+            run_traffic_cli_analysis()
         else:
             print(" [!] Invalid option. Please enter a number between 1 and 5.")
 

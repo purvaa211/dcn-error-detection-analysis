@@ -36,6 +36,9 @@ from algorithms.crc import (
     format_crc_working,
     CRC_POLYNOMIALS
 )
+from algorithms.hamming import (
+    format_hamming_working
+)
 from simulation.simulator import (
     simulate,
     compare_all_techniques
@@ -345,6 +348,13 @@ def get_algorithm_working(
                 "name": "Cyclic Redundancy Check (CRC)",
                 "raw_text": format_crc_working(data, generator=crc_generator),
                 "generator": crc_generator
+            }
+
+        if tech_lower in ("hamming", "hamming (7,4)", "all"):
+            traces["hamming"] = {
+                "name": "Hamming (7,4) Code",
+                "raw_text": format_hamming_working(data),
+                "code_rate": "4/7"
             }
 
         return {

@@ -26,6 +26,14 @@ from web_integration.adapter import (
     get_simulation_history
 )
 from web_integration.experiment_service import experiment_service
+from experiments.theory import get_theoretical_detection
+from core.traffic_analysis import (
+    parse_pcap_file,
+    extract_packet_payload_details,
+    evaluate_traffic_error_detection,
+    compare_all_traffic_techniques,
+    generate_sample_pcap
+)
 
 app = Flask(
     __name__,
@@ -305,6 +313,268 @@ def api_get_metrics():
     source = request.args.get("source", "auto")
     res = experiment_service.get_metrics_table(source=source)
     return jsonify(res)
+
+
+@app.route("/api/theory-compare", methods=["GET"])
+def api_theory_compare():
+    """Retrieve comparative analysis of theoretical bounds versus measured benchmark results."""
+    source = request.args.get("source", "auto")
+    only_theory = request.args.get("only_theory", "false").lower() == "true"
+    metrics_res = experiment_service.get_metrics_table(source=source)
+    if not metrics_res.get("success"):
+        return jsonify(metrics_res)
+
+    records = metrics_res.get("records", [])
+    seen = set()
+    comparison_records = []
+
+    for r in records:
+        err_type = str(r.get("error_type", "")).strip().lower()
+        if err_type in ("clean", "none", "0"):
+            continue
+
+        tech = str(r.get("technique", "")).strip()
+        err_amt = r.get("error_amount")
+        key = (tech, err_type, str(err_amt))
+        if key in seen:
+            continue
+        seen.add(key)
+
+        theory_res = get_theoretical_detection(
+            technique=tech,
+            error_type=err_type,
+            error_param=err_amt
+        )
+
+        theory_val = theory_res.get("value")
+        measured_rate = float(r.get("detection_rate", 0.0))
+
+        if theory_val is not None:
+            theory_pct = round(theory_val * 100.0, 2)
+            diff = round(abs(measured_rate - theory_pct), 2)
+        else:
+            theory_pct = None
+            diff = None
+
+        if only_theory and theory_val is None:
+            continue
+
+        # Format parameter for UI display
+        if err_type == "burst":
+            param_label = f"span={err_amt}"
+        elif err_type == "single":
+            param_label = "1 bit"
+        else:
+            param_label = f"{err_amt} bit(s)"
+
+        comparison_records.append({
+            "technique": tech,
+            "error_type": err_type,
+            "error_amount": err_amt,
+            "error_param": param_label,
+            "measured_pct": round(measured_rate, 2),
+            "theoretical_pct": theory_pct,
+            "difference": diff,
+            "note": theory_res.get("note", "")
+        })
+
+    return jsonify({
+        "success": True,
+        "records": comparison_records,
+        "rows": comparison_records,
+        "total": len(comparison_records),
+        "source": metrics_res.get("source", "baseline")
+    })
+
+
+# ======================================================================
+# NETWORK TRAFFIC ERROR DETECTION API
+# ======================================================================
+
+UPLOAD_FOLDER = os.path.join(PROJECT_ROOT, "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+SAMPLE_PCAP_PATH = os.path.join(PROJECT_ROOT, "samples", "sample_capture.pcap")
+if not os.path.exists(SAMPLE_PCAP_PATH):
+    generate_sample_pcap(SAMPLE_PCAP_PATH)
+
+
+@app.route("/api/traffic/upload", methods=["POST"])
+def api_traffic_upload():
+    """Upload a .pcap or .pcapng file and return parsed packet summaries."""
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "No file part in upload request."}), 400
+
+    file = request.files["file"]
+    if not file or file.filename == "":
+        return jsonify({"success": False, "error": "No file selected for upload."}), 400
+
+    filename = file.filename.lower()
+    if not (filename.endswith(".pcap") or filename.endswith(".pcapng") or filename.endswith(".cap")):
+        return jsonify({"success": False, "error": "Invalid file format. Please upload a Wireshark .pcap or .pcapng capture file."}), 400
+
+    import time
+    safe_name = f"upload_{int(time.time())}_{os.path.basename(file.filename)}"
+    safe_path = os.path.join(UPLOAD_FOLDER, safe_name)
+    file.save(safe_path)
+    session["active_pcap_path"] = safe_path
+
+    res = parse_pcap_file(safe_path)
+    if not res.get("success"):
+        return jsonify(res), 400
+
+    return jsonify({
+        "success": True,
+        "filename": file.filename,
+        "packets": res["packets"],
+        "summary": res["summary"]
+    })
+
+
+@app.route("/api/traffic/sample", methods=["POST", "GET"])
+def api_traffic_sample():
+    """Load the realistic bundled sample PCAP file for instant demonstration."""
+    if not os.path.exists(SAMPLE_PCAP_PATH):
+        generate_sample_pcap(SAMPLE_PCAP_PATH)
+
+    session["active_pcap_path"] = SAMPLE_PCAP_PATH
+    res = parse_pcap_file(SAMPLE_PCAP_PATH)
+    if not res.get("success"):
+        return jsonify(res), 500
+
+    return jsonify({
+        "success": True,
+        "filename": "sample_capture.pcap (Bundled Demonstration)",
+        "packets": res["packets"],
+        "summary": res["summary"],
+        "is_sample": True
+    })
+
+
+@app.route("/api/traffic/select", methods=["POST"])
+def api_traffic_select():
+    """Extract payload and bitstream details from a selected packet."""
+    payload = request.get_json() or {}
+    packet_index = int(payload.get("packet_index", 0))
+    pcap_path = session.get("active_pcap_path", SAMPLE_PCAP_PATH)
+
+    if not os.path.exists(pcap_path):
+        if not os.path.exists(SAMPLE_PCAP_PATH):
+            generate_sample_pcap(SAMPLE_PCAP_PATH)
+        pcap_path = SAMPLE_PCAP_PATH
+        session["active_pcap_path"] = pcap_path
+
+    res = extract_packet_payload_details(pcap_path, packet_index)
+    return jsonify(res)
+
+
+@app.route("/api/traffic/detect", methods=["POST"])
+def api_traffic_detect():
+    """Apply existing error detection technique to captured packet payload (with optional controlled error)."""
+    payload = request.get_json() or {}
+    packet_index = int(payload.get("packet_index", 0))
+    technique = payload.get("technique", "CRC")
+    inject_error = bool(payload.get("inject_error", False))
+    error_type = payload.get("error_type", "single")
+    error_amount = payload.get("error_amount", 1)
+    crc_gen = payload.get("crc_generator", "100000111")
+    chk_size = int(payload.get("checksum_word_size", 8))
+    positions = payload.get("positions")
+
+    pcap_path = session.get("active_pcap_path", SAMPLE_PCAP_PATH)
+    if not os.path.exists(pcap_path):
+        if not os.path.exists(SAMPLE_PCAP_PATH):
+            generate_sample_pcap(SAMPLE_PCAP_PATH)
+        pcap_path = SAMPLE_PCAP_PATH
+
+    pkt_details = extract_packet_payload_details(pcap_path, packet_index)
+    if not pkt_details.get("success"):
+        return jsonify(pkt_details), 400
+    if not pkt_details.get("has_payload"):
+        return jsonify({
+            "success": False,
+            "error": pkt_details.get("reason", "Selected packet contains no payload data.")
+        }), 400
+
+    bin_data = pkt_details["binary_string"]
+    res = evaluate_traffic_error_detection(
+        binary_payload=bin_data,
+        technique=technique,
+        inject_error=inject_error,
+        error_type=error_type,
+        error_amount=error_amount,
+        crc_generator=crc_gen,
+        checksum_word_size=chk_size,
+        positions=positions
+    )
+
+    if res.get("success"):
+        res["packet_metadata"] = pkt_details.get("metadata")
+        res["original_checksum_audit"] = pkt_details.get("metadata", {}).get("checksum_details")
+
+    return jsonify(res)
+
+
+@app.route("/api/traffic/compare", methods=["POST"])
+def api_traffic_compare():
+    """Run synchronized comparison of all canonical techniques on captured packet payload."""
+    payload = request.get_json() or {}
+    packet_index = int(payload.get("packet_index", 0))
+    inject_error = bool(payload.get("inject_error", False))
+    error_type = payload.get("error_type", "single")
+    error_amount = payload.get("error_amount", 1)
+    positions = payload.get("positions")
+
+    pcap_path = session.get("active_pcap_path", SAMPLE_PCAP_PATH)
+    if not os.path.exists(pcap_path):
+        if not os.path.exists(SAMPLE_PCAP_PATH):
+            generate_sample_pcap(SAMPLE_PCAP_PATH)
+        pcap_path = SAMPLE_PCAP_PATH
+
+    pkt_details = extract_packet_payload_details(pcap_path, packet_index)
+    if not pkt_details.get("success"):
+        return jsonify(pkt_details), 400
+    if not pkt_details.get("has_payload"):
+        return jsonify({
+            "success": False,
+            "error": pkt_details.get("reason", "Selected packet contains no payload data.")
+        }), 400
+
+    bin_data = pkt_details["binary_string"]
+    res = compare_all_traffic_techniques(
+        binary_payload=bin_data,
+        inject_error=inject_error,
+        error_type=error_type,
+        error_amount=error_amount,
+        positions=positions
+    )
+
+    if res.get("success"):
+        res["packet_metadata"] = pkt_details.get("metadata")
+        res["original_checksum_audit"] = pkt_details.get("metadata", {}).get("checksum_details")
+
+    return jsonify(res)
+
+
+@app.route("/api/traffic/use-payload", methods=["POST"])
+def api_traffic_use_payload():
+    """Set the selected packet's binary payload as active session data."""
+    payload = request.get_json() or {}
+    packet_index = int(payload.get("packet_index", 0))
+    pcap_path = session.get("active_pcap_path", SAMPLE_PCAP_PATH)
+
+    pkt_details = extract_packet_payload_details(pcap_path, packet_index)
+    if not pkt_details.get("success") or not pkt_details.get("has_payload"):
+        return jsonify({"success": False, "error": "Cannot use empty payload."}), 400
+
+    bin_data = pkt_details["binary_string"]
+    session["session_data"] = bin_data
+    return jsonify({
+        "success": True,
+        "data": bin_data,
+        "length": len(bin_data),
+        "source_type": "traffic",
+        "message": f"Packet #{packet_index + 1} payload ({len(bin_data)} bits) set as active session data."
+    })
 
 
 # ======================================================================

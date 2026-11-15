@@ -22,3 +22,8 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
+
+# Temporary user uploads
+uploads/*
+!uploads/.gitkeep
+

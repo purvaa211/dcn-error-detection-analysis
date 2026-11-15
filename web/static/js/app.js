@@ -19,7 +19,11 @@ const AppState = {
     sessionData: "1011011011001100",
     simInputMode: "binary", // "binary" or "text"
     metricsData: [],
-    currentTraceAlgo: "all"
+    theoryData: [],
+    currentTraceAlgo: "all",
+    trafficPackets: [],
+    selectedPacketIndex: null,
+    selectedPacketData: null
 };
 
 // Page Metadata for Top Header Bar
@@ -31,6 +35,10 @@ const PAGE_META = {
     simulator: {
         title: "Transmission Simulator",
         desc: "Interactive step-by-step data framing, physical channel noise injection, and receiver error detection."
+    },
+    traffic: {
+        title: "Network Traffic Analysis",
+        desc: "Inspect real-world PCAP network traffic, audit protocol checksums, and evaluate error detection."
     },
     detection: {
         title: "Error Detection",
@@ -54,6 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initSession();
     loadOverviewStats();
     loadMetricsTable();
+    loadTheoryCompareTable();
 
     // Check hash for direct deep-linking
     const hash = window.location.hash.replace("#", "");
@@ -105,6 +114,11 @@ function navigateToPage(pageId) {
         updateCompPayloadDisplay();
     } else if (pageId === "experiments") {
         loadMetricsTable();
+        loadTheoryCompareTable();
+    } else if (pageId === "traffic") {
+        if (!AppState.trafficPackets || AppState.trafficPackets.length === 0) {
+            loadSampleTrafficPcap();
+        }
     }
 }
 
@@ -311,7 +325,8 @@ function handleTechSelectionChange() {
         "VRC / Parity": "Appends a single bit to enforce an even number of '1's. Catches 100% of single-bit errors; misses all even errors.",
         "LRC": "Divides bitstream into 8-bit blocks and computes column-wise parity check characters.",
         "Checksum": "Accumulates m-bit words using 1's complement addition with end-around carry and bitwise inversion.",
-        "CRC": "Treats data as polynomial coefficients over GF(2) and appends remainder from modulo-2 generator division."
+        "CRC": "Treats data as polynomial coefficients over GF(2) and appends remainder from modulo-2 generator division.",
+        "Hamming (7,4)": "Forward error correction (FEC) code that detects and repairs single-bit errors per 7-bit block (75% overhead, d_min=3)."
     };
     if (desc) desc.textContent = descMap[val] || "";
 }
@@ -422,7 +437,18 @@ function renderSimulatorResults(sim) {
     // Verdict Badge
     const verdictPill = document.getElementById("sim-verdict-pill");
     if (verdictPill) {
-        if (sim.error_type === "clean") {
+        if (sim.technique && sim.technique.includes("Hamming")) {
+            if (sim.error_type === "clean" || sim.errors_injected === 0) {
+                verdictPill.className = "badge badge-neutral";
+                verdictPill.textContent = "Clean Transmission";
+            } else if (sim.hamming_verdict === "[ERROR DETECTED AND CORRECTED]" || (sim.diagnostics && sim.diagnostics.successfully_corrected)) {
+                verdictPill.className = "badge badge-success";
+                verdictPill.textContent = "Error Corrected (FEC)";
+            } else {
+                verdictPill.className = "badge badge-danger";
+                verdictPill.textContent = "Not Correctable / Miscorrected";
+            }
+        } else if (sim.error_type === "clean") {
             verdictPill.className = "badge badge-neutral";
             verdictPill.textContent = "Clean Transmission";
         } else if (sim.error_detected) {
@@ -476,7 +502,15 @@ function renderSimulatorResults(sim) {
     const verdictTitle = document.getElementById("vis-verdict-title");
     const explText = document.getElementById("vis-explanation-text");
     if (verdictTitle) {
-        if (sim.error_type === "clean") {
+        if (sim.technique && sim.technique.includes("Hamming")) {
+            if (sim.error_type === "clean" || sim.errors_injected === 0) {
+                verdictTitle.innerHTML = `<span style="color:var(--primary);">[CLEAN TRANSMISSION]</span> No channel noise detected.`;
+            } else if (sim.hamming_verdict === "[ERROR DETECTED AND CORRECTED]" || (sim.diagnostics && sim.diagnostics.successfully_corrected)) {
+                verdictTitle.innerHTML = `<span style="color:var(--status-success-text);">[ERROR DETECTED AND CORRECTED]</span> Single-bit error successfully located by syndrome and inverted back to original data.`;
+            } else {
+                verdictTitle.innerHTML = `<span style="color:var(--status-error-text);">[ERROR DETECTED - NOT CORRECTABLE / MISCORRECTED]</span> Multiple errors in block caused miscorrection (d_min = 3).`;
+            }
+        } else if (sim.error_type === "clean") {
             verdictTitle.innerHTML = `<span style="color:var(--primary);">[INTEGRITY VERIFIED]</span> No channel noise detected.`;
         } else if (sim.error_detected) {
             verdictTitle.innerHTML = `<span style="color:var(--status-success-text);">[ERROR DETECTED]</span> Receiver integrity verification failed as expected.`;
@@ -549,7 +583,8 @@ async function loadTraceForAlgo(tech) {
         lrc: "LRC Matrix Step-by-Step Calculation",
         checksum: "Internet Checksum 1's Complement Step-by-Step Calculation",
         crc: "CRC Modulo-2 Polynomial Division Working",
-        all: "All Four Error Detection Techniques Calculations"
+        hamming: "Hamming (7,4) Single-Bit FEC Step-by-Step Working",
+        all: "All Error Detection & Correction Calculations"
     };
     if (titleEl) titleEl.textContent = titleMap[tech] || "Algorithm Working Trace";
 
@@ -635,17 +670,32 @@ function renderComparisonTable(results) {
         const tr = document.createElement("tr");
 
         let statusBadge = "";
-        if (item.error_type === "clean") {
-            statusBadge = `<span class="badge badge-neutral">Clean Frame</span>`;
-        } else if (item.error_detected) {
-            statusBadge = `<span class="badge badge-success">Detected</span>`;
-        } else {
-            statusBadge = `<span class="badge badge-danger">Missed</span>`;
-        }
+        let verdictStr = "";
 
-        const verdictStr = item.is_valid
-            ? `<span style="color:var(--status-success-text); font-weight:700;">[VALID]</span>`
-            : `<span style="color:var(--status-error-text); font-weight:700;">[CORRUPTED]</span>`;
+        if (item.technique && item.technique.includes("Hamming")) {
+            if (item.error_type === "clean" || item.errors_injected === 0) {
+                statusBadge = `<span class="badge badge-neutral">Clean Frame</span>`;
+                verdictStr = `<span style="color:var(--status-success-text); font-weight:700;">[CLEAN TRANSMISSION]</span>`;
+            } else if (item.hamming_verdict === "[ERROR DETECTED AND CORRECTED]" || (item.diagnostics && item.diagnostics.successfully_corrected)) {
+                statusBadge = `<span class="badge badge-success">Corrected</span>`;
+                verdictStr = `<span style="color:var(--status-success-text); font-weight:700;">[ERROR DETECTED AND CORRECTED]</span>`;
+            } else {
+                statusBadge = `<span class="badge badge-danger">Miscorrected</span>`;
+                verdictStr = `<span style="color:var(--status-error-text); font-weight:700;">[ERROR DETECTED - NOT CORRECTABLE / MISCORRECTED]</span>`;
+            }
+        } else {
+            if (item.error_type === "clean") {
+                statusBadge = `<span class="badge badge-neutral">Clean Frame</span>`;
+            } else if (item.error_detected) {
+                statusBadge = `<span class="badge badge-success">Detected</span>`;
+            } else {
+                statusBadge = `<span class="badge badge-danger">Missed</span>`;
+            }
+
+            verdictStr = item.is_valid
+                ? `<span style="color:var(--status-success-text); font-weight:700;">[VALID]</span>`
+                : `<span style="color:var(--status-error-text); font-weight:700;">[CORRUPTED]</span>`;
+        }
 
         tr.innerHTML = `
             <td><strong>${escapeHtml(item.technique)}</strong></td>
@@ -695,6 +745,7 @@ async function runBenchmarkSweep() {
             await fetch("/api/experiments/apply", { method: "POST" });
             refreshCharts();
             loadMetricsTable();
+            loadTheoryCompareTable();
             alert("Benchmark experiments successfully completed and analytical graphs updated!");
         } else {
             alert(json.error || "Benchmark sweep failed.");
@@ -862,4 +913,530 @@ function escapeHtml(str) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+// ==========================================================================
+// THEORETICAL VS MEASURED COMPARISON CONTROLLER
+// ==========================================================================
+
+async function loadTheoryCompareTable() {
+    const tbody = document.getElementById("theory-table-body");
+    try {
+        const res = await fetch("/api/theory-compare");
+        const json = await res.json();
+        if (json.success && json.records) {
+            AppState.theoryData = json.records;
+            renderTheoryCompareTableRows(json.records);
+        } else {
+            if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">${json.error || "No comparison data found."}</td></tr>`;
+        }
+    } catch (e) {
+        console.error("Theory comparison load error:", e);
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Error loading theory comparison.</td></tr>`;
+    }
+}
+
+function renderTheoryCompareTableRows(rows) {
+    const tbody = document.getElementById("theory-table-body");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No comparison records found.</td></tr>`;
+        return;
+    }
+
+    rows.forEach(r => {
+        const tr = document.createElement("tr");
+        const measuredStr = (r.measured_pct !== null && r.measured_pct !== undefined) ? `${r.measured_pct.toFixed(1)}%` : "-";
+        const theoryStr = (r.theoretical_pct !== null && r.theoretical_pct !== undefined) ? `${r.theoretical_pct.toFixed(2)}%` : "-";
+        const diffStr = (r.difference !== null && r.difference !== undefined) ? `${r.difference.toFixed(2)}%` : "-";
+
+        tr.innerHTML = `
+            <td><strong>${escapeHtml(r.technique)}</strong></td>
+            <td>${escapeHtml(formatErrorTypeName(r.error_type))}</td>
+            <td><code>${escapeHtml(r.error_param)}</code></td>
+            <td><strong>${measuredStr}</strong></td>
+            <td>${theoryStr}</td>
+            <td>${diffStr}</td>
+            <td style="font-size:0.84rem; color:var(--text-secondary);">${escapeHtml(r.note || "")}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function filterTheoryTable() {
+    const input = document.getElementById("theory-search-input");
+    const q = (input ? input.value : "").toLowerCase().trim();
+    if (!q) {
+        renderTheoryCompareTableRows(AppState.theoryData);
+        return;
+    }
+    const filtered = (AppState.theoryData || []).filter(r =>
+        (r.technique || "").toLowerCase().includes(q) ||
+        (r.error_type || "").toLowerCase().includes(q) ||
+        (r.error_param || "").toLowerCase().includes(q) ||
+        (r.note || "").toLowerCase().includes(q)
+    );
+    renderTheoryCompareTableRows(filtered);
+}
+
+
+// ==========================================================================
+// NETWORK TRAFFIC ANALYSIS & ERROR DETECTION CONTROLLER
+// ==========================================================================
+
+async function handlePcapUploadEvent(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const tbody = document.getElementById("traffic-packet-tbody");
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center">Uploading and parsing ${escapeHtml(file.name)} with Scapy...</td></tr>`;
+
+    try {
+        const res = await fetch("/api/traffic/upload", {
+            method: "POST",
+            body: formData
+        });
+        const json = await res.json();
+        if (json.success) {
+            updateTrafficSummary(json.filename, json.summary);
+            AppState.trafficPackets = json.packets;
+            renderTrafficPacketTable(json.packets);
+        } else {
+            alert(json.error || "Failed to parse uploaded PCAP file.");
+            if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">Upload failed: ${escapeHtml(json.error || "Error parsing file")}</td></tr>`;
+        }
+    } catch (e) {
+        console.error("PCAP upload error:", e);
+        alert("Failed to upload PCAP file.");
+    } finally {
+        event.target.value = "";
+    }
+}
+
+async function loadSampleTrafficPcap() {
+    const tbody = document.getElementById("traffic-packet-tbody");
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center">Loading bundled demonstration PCAP capture...</td></tr>`;
+
+    try {
+        const res = await fetch("/api/traffic/sample", { method: "POST" });
+        const json = await res.json();
+        if (json.success) {
+            updateTrafficSummary(json.filename, json.summary);
+            AppState.trafficPackets = json.packets;
+            renderTrafficPacketTable(json.packets);
+        } else {
+            alert(json.error || "Failed to load sample capture.");
+        }
+    } catch (e) {
+        console.error("Sample PCAP load error:", e);
+        alert("Error loading sample capture.");
+    }
+}
+
+function updateTrafficSummary(filename, summary) {
+    const bar = document.getElementById("traffic-summary-bar");
+    const packetsCard = document.getElementById("traffic-packets-card");
+    if (bar) bar.style.display = "grid";
+    if (packetsCard) packetsCard.style.display = "block";
+
+    const fEl = document.getElementById("traf-stat-file");
+    const cEl = document.getElementById("traf-stat-count");
+    const pEl = document.getElementById("traf-stat-payloads");
+    const vEl = document.getElementById("traf-stat-valid");
+    const prEl = document.getElementById("traf-stat-protocols");
+
+    if (fEl) fEl.textContent = filename || "Capture File";
+    if (cEl) cEl.textContent = `${summary.total_packets} packets in capture`;
+    if (pEl) pEl.textContent = `${summary.packets_with_payload} of ${summary.displayed_packets}`;
+    if (vEl) {
+        const cs = summary.checksum_summary || {};
+        vEl.textContent = `${cs.valid || 0} Valid / ${cs.mismatch || 0} Corrupted`;
+    }
+    if (prEl) {
+        const protos = Object.keys(summary.protocols || {}).slice(0, 4).join(", ");
+        prEl.textContent = protos || "TCP, UDP, IP";
+    }
+}
+
+function renderTrafficPacketTable(packets) {
+    const tbody = document.getElementById("traffic-packet-tbody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    if (!packets || packets.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No packets found in capture.</td></tr>`;
+        return;
+    }
+
+    packets.forEach((p, idx) => {
+        const tr = document.createElement("tr");
+        tr.id = `traf-pkt-row-${idx}`;
+        if (AppState.selectedPacketIndex === idx) {
+            tr.style.backgroundColor = "rgba(49, 92, 73, 0.08)";
+        }
+
+        const srcStr = p.src_port ? `${escapeHtml(p.src_ip)}:${p.src_port}` : escapeHtml(p.src_ip);
+        const dstStr = p.dst_port ? `${escapeHtml(p.dst_ip)}:${p.dst_port}` : escapeHtml(p.dst_ip);
+        const payloadBadge = p.has_payload
+            ? `<span class="badge badge-success">${p.payload_size_bytes} B</span>`
+            : `<span class="badge badge-neutral">0 B (Headers)</span>`;
+
+        tr.innerHTML = `
+            <td><strong>#${p.packet_number}</strong></td>
+            <td><span class="badge badge-neutral">${escapeHtml(p.protocol)}</span></td>
+            <td><code>${srcStr}</code></td>
+            <td><code>${dstStr}</code></td>
+            <td>${p.packet_size_bytes} B</td>
+            <td>${payloadBadge}</td>
+            <td>
+                <span class="badge ${escapeHtml(p.checksum_badge || 'badge-neutral')}">${escapeHtml(p.checksum_label || 'Unverified')}</span>
+                <span style="font-size:0.75rem; color:var(--text-secondary); display:block; margin-top:2px;">${escapeHtml(p.checksum_details || '')}</span>
+            </td>
+            <td>
+                <button class="btn btn-sm btn-outline" onclick="selectTrafficPacket(${idx})">Select Packet</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function filterTrafficTable() {
+    const q = (document.getElementById("traffic-search-input").value || "").toLowerCase().trim();
+    if (!q) {
+        renderTrafficPacketTable(AppState.trafficPackets);
+        return;
+    }
+    const filtered = (AppState.trafficPackets || []).filter(p =>
+        String(p.packet_number).includes(q) ||
+        (p.protocol || "").toLowerCase().includes(q) ||
+        (p.src_ip || "").toLowerCase().includes(q) ||
+        (p.dst_ip || "").toLowerCase().includes(q) ||
+        (p.checksum_label || "").toLowerCase().includes(q) ||
+        (p.checksum_details || "").toLowerCase().includes(q)
+    );
+    renderTrafficPacketTable(filtered);
+}
+
+async function selectTrafficPacket(index) {
+    AppState.selectedPacketIndex = index;
+
+    // Highlight row in table
+    document.querySelectorAll("#traffic-packet-tbody tr").forEach((tr, i) => {
+        tr.style.backgroundColor = (i === index) ? "rgba(49, 92, 73, 0.08)" : "";
+    });
+
+    const card = document.getElementById("traffic-selected-card");
+    if (card) card.style.display = "block";
+
+    // Reset previous results
+    const resCard = document.getElementById("traffic-results-card");
+    const compCard = document.getElementById("traffic-compare-card");
+    if (resCard) resCard.style.display = "none";
+    if (compCard) compCard.style.display = "none";
+
+    try {
+        const res = await fetch("/api/traffic/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ packet_index: index })
+        });
+        const json = await res.json();
+        if (!json.success) {
+            alert(json.error || "Failed to extract packet details.");
+            return;
+        }
+
+        AppState.selectedPacketData = json;
+        renderSelectedTrafficPacket(json);
+
+        // Smooth scroll to selected packet card
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (e) {
+        console.error("Select packet error:", e);
+        alert("Failed to extract packet.");
+    }
+}
+
+function renderSelectedTrafficPacket(data) {
+    const titleEl = document.getElementById("traf-selected-title");
+    const warnEl = document.getElementById("traf-empty-payload-warning");
+    const usableArea = document.getElementById("traf-usable-payload-area");
+    const meta = data.metadata || {};
+
+    if (titleEl) {
+        titleEl.textContent = `Selected Packet #${meta.packet_number} (${meta.protocol}) – ${meta.src_ip} -> ${meta.dst_ip}`;
+    }
+
+    if (!data.has_payload) {
+        if (warnEl) {
+            warnEl.style.display = "block";
+            warnEl.innerHTML = `<strong>Notice:</strong> ${escapeHtml(data.reason || "This packet contains 0 payload bytes.")}`;
+        }
+        if (usableArea) usableArea.style.display = "none";
+        return;
+    }
+
+    if (warnEl) warnEl.style.display = "none";
+    if (usableArea) usableArea.style.display = "block";
+
+    const byteLenEl = document.getElementById("traf-payload-byte-len");
+    const bitLenEl = document.getElementById("traf-payload-bit-len");
+    const chkLabelEl = document.getElementById("traf-payload-chksum-label");
+    const hexEl = document.getElementById("traf-hex-dump");
+    const ascEl = document.getElementById("traf-ascii-preview");
+    const binEl = document.getElementById("traf-binary-preview");
+
+    if (byteLenEl) byteLenEl.textContent = `${data.byte_length} Bytes`;
+    if (bitLenEl) bitLenEl.textContent = `${data.bit_length} Bits`;
+    if (chkLabelEl) chkLabelEl.textContent = meta.checksum_label || "Audited";
+    if (hexEl) hexEl.textContent = data.hex_dump || "-";
+    if (ascEl) ascEl.textContent = data.ascii_preview || "-";
+    if (binEl) binEl.textContent = data.binary_string || "-";
+}
+
+function toggleTrafficErrorOptions() {
+    const chk = document.getElementById("traf-inject-toggle");
+    const box = document.getElementById("traf-error-options-box");
+    if (box) box.style.display = (chk && chk.checked) ? "grid" : "none";
+}
+
+function handleTrafficTechChange() {
+    const tech = document.getElementById("traf-tech-select").value;
+    const polyWrap = document.getElementById("traf-crc-poly-wrap");
+    if (polyWrap) {
+        polyWrap.style.display = (tech === "CRC") ? "block" : "none";
+    }
+}
+
+async function executeTrafficDetection() {
+    if (AppState.selectedPacketIndex === null) {
+        alert("Please select a packet from the table first.");
+        return;
+    }
+
+    const tech = document.getElementById("traf-tech-select").value;
+    const inject = document.getElementById("traf-inject-toggle").checked;
+    const errType = document.getElementById("traf-error-type").value;
+    const errAmount = parseInt(document.getElementById("traf-error-amount").value || "2", 10);
+    const crcPoly = document.getElementById("traf-crc-poly").value;
+
+    try {
+        const res = await fetch("/api/traffic/detect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                packet_index: AppState.selectedPacketIndex,
+                technique: tech,
+                inject_error: inject,
+                error_type: errType,
+                error_amount: errAmount,
+                crc_generator: crcPoly
+            })
+        });
+        const json = await res.json();
+        if (!json.success) {
+            alert(json.error || "Detection execution failed.");
+            return;
+        }
+
+        renderTrafficDetectionResults(json);
+    } catch (e) {
+        console.error("Traffic detection error:", e);
+        alert("Error executing error detection on packet.");
+    }
+}
+
+function renderTrafficDetectionResults(sim) {
+    const card = document.getElementById("traffic-results-card");
+    const compCard = document.getElementById("traffic-compare-card");
+    if (card) card.style.display = "block";
+    if (compCard) compCard.style.display = "none";
+
+    const pill = document.getElementById("traf-result-pill");
+    const titleEl = document.getElementById("traf-result-verdict-title");
+    const explEl = document.getElementById("traf-result-explanation");
+    const errEl = document.getElementById("traf-res-errors");
+    const ovhEl = document.getElementById("traf-res-overhead");
+    const pctEl = document.getElementById("traf-res-pct");
+    const latEl = document.getElementById("traf-res-latency");
+
+    if (pill) {
+        if (!sim.inject_error || sim.errors_injected === 0) {
+            pill.className = "badge badge-neutral";
+            pill.textContent = "Clean Baseline";
+        } else if (sim.verdict && sim.verdict.includes("CORRECTED")) {
+            pill.className = "badge badge-success";
+            pill.textContent = "Error Corrected (FEC)";
+        } else if (sim.error_detected) {
+            pill.className = "badge badge-success";
+            pill.textContent = "Error Detected";
+        } else {
+            pill.className = "badge badge-danger";
+            pill.textContent = "Error Missed";
+        }
+    }
+
+    if (titleEl) {
+        if (!sim.inject_error || sim.errors_injected === 0) {
+            titleEl.innerHTML = `<span style="color:var(--primary);">${escapeHtml(sim.verdict)}</span> Clean reference frame verified.`;
+        } else if (sim.verdict && sim.verdict.includes("CORRECTED")) {
+            titleEl.innerHTML = `<span style="color:var(--status-success-text);">${escapeHtml(sim.verdict)}</span> Single-bit error successfully repaired.`;
+        } else if (sim.error_detected) {
+            titleEl.innerHTML = `<span style="color:var(--status-success-text);">${escapeHtml(sim.verdict)}</span> Corrupted transmission identified.`;
+        } else {
+            titleEl.innerHTML = `<span style="color:var(--status-error-text);">${escapeHtml(sim.verdict)}</span> Channel corruption escaped receiver detection!`;
+        }
+    }
+
+    if (explEl) explEl.textContent = sim.explanation || "";
+    if (errEl) errEl.textContent = `${sim.errors_injected} bit(s)`;
+    if (ovhEl) ovhEl.textContent = `+${sim.overhead_bits} bits`;
+    if (pctEl) pctEl.textContent = `${sim.overhead_percentage}%`;
+    if (latEl) latEl.textContent = `${sim.processing_time_us} µs`;
+
+    // Bitstream Visualizer
+    const visWrap = document.getElementById("traf-bitstream-vis-wrap");
+    const frameView = document.getElementById("traf-vis-frame-view");
+    const hintEl = document.getElementById("traf-vis-indices-hint");
+
+    if (sim.inject_error && sim.flipped_indices && sim.flipped_indices.length > 0) {
+        if (visWrap) visWrap.style.display = "block";
+        if (frameView) {
+            frameView.innerHTML = renderBitCells(sim.corrupted_frame, sim.flipped_indices, sim.payload_bits);
+        }
+        if (hintEl) {
+            hintEl.textContent = `Flipped ${sim.errors_injected} bit(s) at frame indices: [${sim.flipped_indices.join(", ")}]. Check bits highlighted in green, corrupted bits in red.`;
+        }
+    } else {
+        if (visWrap) visWrap.style.display = "block";
+        if (frameView) {
+            frameView.innerHTML = renderBitCells(sim.original_frame, [], sim.payload_bits);
+        }
+        if (hintEl) hintEl.textContent = `Pristine reference frame (+${sim.overhead_bits} check bits appended).`;
+    }
+
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function executeTrafficComparison() {
+    if (AppState.selectedPacketIndex === null) {
+        alert("Please select a packet from the table first.");
+        return;
+    }
+
+    const inject = document.getElementById("traf-inject-toggle").checked;
+    const errType = document.getElementById("traf-error-type").value;
+    const errAmount = parseInt(document.getElementById("traf-error-amount").value || "2", 10);
+
+    try {
+        const res = await fetch("/api/traffic/compare", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                packet_index: AppState.selectedPacketIndex,
+                inject_error: inject,
+                error_type: errType,
+                error_amount: errAmount
+            })
+        });
+        const json = await res.json();
+        if (!json.success) {
+            alert(json.error || "Comparison failed.");
+            return;
+        }
+
+        renderTrafficComparisonTable(json.results, json.forced_indices);
+    } catch (e) {
+        console.error("Traffic compare error:", e);
+        alert("Error executing comparison across techniques.");
+    }
+}
+
+function renderTrafficComparisonTable(results, forcedIndices) {
+    const card = document.getElementById("traffic-compare-card");
+    const resCard = document.getElementById("traffic-results-card");
+    if (card) card.style.display = "block";
+    if (resCard) resCard.style.display = "none";
+
+    const tbody = document.getElementById("traffic-comp-tbody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    results.forEach(item => {
+        const tr = document.createElement("tr");
+
+        let statusBadge = "";
+        let verdictStr = "";
+
+        if (item.technique && item.technique.includes("Hamming")) {
+            if (!item.inject_error || item.errors_injected === 0) {
+                statusBadge = `<span class="badge badge-neutral">Clean Frame</span>`;
+                verdictStr = `<span style="color:var(--status-success-text); font-weight:700;">[CLEAN TRANSMISSION]</span>`;
+            } else if (item.verdict && item.verdict.includes("CORRECTED")) {
+                statusBadge = `<span class="badge badge-success">Corrected (FEC)</span>`;
+                verdictStr = `<span style="color:var(--status-success-text); font-weight:700;">[ERROR CORRECTED]</span>`;
+            } else {
+                statusBadge = `<span class="badge badge-danger">Miscorrected</span>`;
+                verdictStr = `<span style="color:var(--status-error-text); font-weight:700;">[NOT CORRECTABLE]</span>`;
+            }
+        } else if (!item.inject_error || item.errors_injected === 0) {
+            statusBadge = `<span class="badge badge-neutral">Clean Frame</span>`;
+            verdictStr = `<span style="color:var(--status-success-text); font-weight:700;">[VALID]</span>`;
+        } else if (item.error_detected) {
+            statusBadge = `<span class="badge badge-success">Detected</span>`;
+            verdictStr = `<span style="color:var(--status-error-text); font-weight:700;">[REJECTED]</span>`;
+        } else {
+            statusBadge = `<span class="badge badge-danger">Missed</span>`;
+            verdictStr = `<span style="color:var(--status-error-text); font-weight:700;">[UNDETECTED]</span>`;
+        }
+
+        const indicesStr = (item.flipped_indices && item.flipped_indices.length > 0)
+            ? `[${item.flipped_indices.join(", ")}]`
+            : "None (0)";
+
+        tr.innerHTML = `
+            <td><strong>${escapeHtml(item.technique)}</strong></td>
+            <td>+${item.overhead_bits} bits (${item.overhead_percentage}%)</td>
+            <td>${item.processing_time_us} µs</td>
+            <td><code>${indicesStr}</code></td>
+            <td>${statusBadge}</td>
+            <td>${verdictStr}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function useCurrentPacketAsSimPayload() {
+    if (AppState.selectedPacketIndex === null) {
+        alert("Please select a packet with payload first.");
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/traffic/use-payload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ packet_index: AppState.selectedPacketIndex })
+        });
+        const json = await res.json();
+        if (json.success) {
+            setGlobalPayload(json.data);
+            const input = document.getElementById("sim-data-input");
+            if (input) input.value = json.data;
+            alert(`Packet #${AppState.selectedPacketIndex + 1} payload (${json.length} bits) successfully transferred as active simulation payload! Navigating to simulator...`);
+            navigateToPage("simulator");
+        } else {
+            alert(json.error || "Failed to set payload.");
+        }
+    } catch (e) {
+        console.error("Use payload error:", e);
+        alert("Failed to set packet payload.");
+    }
 }

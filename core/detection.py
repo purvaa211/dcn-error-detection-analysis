@@ -14,6 +14,7 @@ from algorithms.parity import add_vrc, check_vrc, format_vrc_working
 from algorithms.lrc import add_lrc, check_lrc, format_lrc_working
 from algorithms.checksum import add_checksum, verify_checksum_detailed, format_checksum_working
 from algorithms.crc import crc_encode, crc_check_detailed, format_crc_working, CRC_POLYNOMIALS
+from algorithms.hamming import hamming_encode, hamming_decode, format_hamming_working
 
 
 class ErrorDetection(ABC):
@@ -199,6 +200,82 @@ class CRC(ErrorDetection):
         return len(self.generator) - 1
 
 
+class HammingCode(ErrorDetection):
+    """Hamming (7,4) Single-Bit Error-Correcting Code Strategy.
+    
+    Partitions binary payload into 4-bit nibbles (zero-padded if necessary),
+    computes 3 parity bits (even parity) per nibble, and generates 7-bit codewords.
+    
+    Characteristics:
+    - Minimum Hamming distance d_min = 3.
+    - Can detect and correct any single-bit error per 7-bit codeword block.
+    - In double-bit error conditions, standard (7,4) detects an error but
+      miscorrects unless extended with an overall parity bit (SECDED).
+    - 3 redundant bits per 4 data bits (75% overhead).
+    """
+
+    def __init__(self):
+        super().__init__(name="Hamming (7,4)", category="Error-Correcting Code")
+        self._last_payload: Optional[str] = None
+        self._last_payload_len: Optional[int] = None
+
+    def encode(self, data: str) -> str:
+        self._last_payload = data
+        self._last_payload_len = len(data)
+        return hamming_encode(data)
+
+    def verify(self, frame: str) -> Tuple[bool, Dict[str, Any]]:
+        orig_len = self._last_payload_len
+        corr_frame, decoded_payload, block_info = hamming_decode(frame, original_payload_len=orig_len)
+
+        # An error is detected if any block had a non-zero syndrome
+        any_error_detected = any(b["error_detected"] for b in block_info)
+        is_clean = not any_error_detected
+
+        # Check positions of errors across all blocks
+        corrected_positions = []
+        syndromes = []
+        for b in block_info:
+            syndromes.append(b["syndrome_bin"])
+            if b["error_position"] is not None:
+                # Global frame index (0-based)
+                global_pos = b["block_index"] * 7 + (b["error_position"] - 1)
+                corrected_positions.append(global_pos)
+
+        # Assess correction validity against original payload if available
+        if self._last_payload is not None:
+            matches_original = (decoded_payload == self._last_payload)
+        else:
+            matches_original = is_clean or (len(corrected_positions) == 1)
+
+        successfully_corrected = any_error_detected and matches_original
+        miscorrected = any_error_detected and not matches_original
+
+        diagnostics = {
+            "syndromes": syndromes,
+            "error_detected": any_error_detected,
+            "corrected": any_error_detected,
+            "successfully_corrected": successfully_corrected,
+            "miscorrected": miscorrected,
+            "corrected_positions": corrected_positions,
+            "corrected_frame": corr_frame,
+            "decoded_payload": decoded_payload,
+            "block_info": block_info
+        }
+
+        # For ErrorDetection protocol: is_valid is True if clean frame (no errors detected)
+        is_valid = is_clean
+        return is_valid, diagnostics
+
+    def get_working_steps(self, data: str) -> str:
+        return format_hamming_working(data)
+
+    def get_redundancy_bits(self, data: str) -> int:
+        rem = len(data) % 4
+        num_blocks = (len(data) + (4 - rem if rem != 0 else 0)) // 4
+        return (num_blocks * 7) - len(data)
+
+
 def get_detection_strategy(
     technique: str,
     crc_generator: str = "100000111",
@@ -223,6 +300,8 @@ def get_detection_strategy(
         return LRC(block_size=8)
     elif "checksum" in tech:
         return Checksum(word_size=checksum_word_size)
+    elif "hamming" in tech:
+        return HammingCode()
     elif "crc" in tech:
         gen = crc_generator
         for k, v in CRC_POLYNOMIALS.items():

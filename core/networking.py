@@ -139,6 +139,23 @@ class NetworkSimulator:
         overhead_bits = detection_strategy.get_redundancy_bits(data)
         overhead_pct = detection_strategy.get_overhead_percentage(data)
 
+        # Check for Hamming-specific verdict and diagnostics
+        hamming_verdict = None
+        if "Hamming" in detection_strategy.name:
+            decoded = diag_details.get("decoded_payload")
+            if channel_result.errors_injected == 0:
+                hamming_verdict = "[CLEAN TRANSMISSION]"
+                diag_details["successfully_corrected"] = False
+                diag_details["miscorrected"] = False
+            elif decoded == data:
+                hamming_verdict = "[ERROR DETECTED AND CORRECTED]"
+                diag_details["successfully_corrected"] = True
+                diag_details["miscorrected"] = False
+            else:
+                hamming_verdict = "[ERROR DETECTED - NOT CORRECTABLE / MISCORRECTED]"
+                diag_details["successfully_corrected"] = False
+                diag_details["miscorrected"] = True
+
         explanation = self._generate_explanation(
             tech_name=detection_strategy.name,
             error_type=channel_result.error_type,
@@ -167,7 +184,8 @@ class NetworkSimulator:
             "checking_time": checking_time,
             "processing_time": total_time,
             "diagnostics": diag_details,
-            "explanation": explanation
+            "explanation": explanation,
+            "hamming_verdict": hamming_verdict
         }
 
     def compare_all(
@@ -233,7 +251,8 @@ class NetworkSimulator:
             ("VRC / Parity", "even"),
             ("LRC", 8),
             ("Checksum", 8),
-            ("CRC", "100000111")
+            ("CRC", "100000111"),
+            ("Hamming (7,4)", None)
         ]
 
         results = []
@@ -297,5 +316,22 @@ class NetworkSimulator:
                 return f"CRC DETECTED error: Modulo-2 polynomial division remainder is non-zero (R = '{rem}')."
             else:
                 return "CRC MISSED error: Error polynomial E(x) is an exact multiple of generator G(x)."
+
+        elif "Hamming" in tech_name:
+            if diag_details.get("successfully_corrected"):
+                corr_pos = diag_details.get("corrected_positions", [])
+                return (
+                    f"Hamming (7,4) DETECTED and CORRECTED single-bit error: "
+                    f"Syndrome identified corrupted bit position(s) {corr_pos} and inverted back to restore original data."
+                )
+            elif diag_details.get("miscorrected"):
+                return (
+                    f"Hamming (7,4) DETECTED error but NOT CORRECTABLE: Multiple bit errors in a 7-bit block "
+                    f"caused syndrome miscorrection (d_min = 3 can only reliably correct 1 bit per block)."
+                )
+            elif error_detected:
+                return "Hamming (7,4) DETECTED error: Parity syndrome indicated transmission corruption."
+            else:
+                return "Hamming (7,4) MISSED error: Corrupted bits formed an undetectable codeword."
 
         return "Verification completed."
